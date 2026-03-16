@@ -1,0 +1,30 @@
+# Ambiente virtual
+.venv/
+venv/
+env/
+
+# Variáveis de ambiente
+.env
+
+# Credenciais Google
+credentials.json
+token.json
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Arquivos gerados
+*.xlsx
+*.csv
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Claude Code
+CLAUDE.md
