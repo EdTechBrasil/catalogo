@@ -279,3 +279,15 @@ def write_excel(records: list[dict]) -> str:
     build_por_nivel(wb, records)
     wb.save(OUTPUT_FILE)
     return OUTPUT_FILE
+
+
+def write_excel_to_bytes(records: list[dict]) -> bytes:
+    import io
+    wb = Workbook()
+    build_catalogo(wb, records)
+    build_resumo(wb, records)
+    build_por_nivel(wb, records)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf.read()

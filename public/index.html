@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Catálogo — Gráfica Educar</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- AG Grid Community -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@33.0.0/styles/ag-grid.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ag-grid-community@33.0.0/styles/ag-theme-alpine.css" />
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────────────────── -->
+<header>
+  <span style="font-size:22px">📚</span>
+  <h1>Catálogo Gráfica Educar</h1>
+  <span class="badge" id="header-count">0 títulos</span>
+</header>
+
+<!-- ── Tabs ───────────────────────────────────────────────────────────── -->
+<div class="tabs">
+  <button class="tab-btn active" data-tab="catalogo">📋 Catálogo</button>
+  <button class="tab-btn"        data-tab="resumo">📊 Resumo</button>
+  <button class="tab-btn"        data-tab="sobre">ℹ️ Sobre</button>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- ABA: CATÁLOGO                                                         -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="tab-panel active" id="tab-catalogo">
+
+  <div class="toolbar">
+    <!-- Upload / Import -->
+    <button class="btn btn-primary" id="btn-upload" title="Upload de ZIP ou PDFs">
+      ⬆️ Upload ZIP/PDF
+    </button>
+    <input type="file" id="inp-upload" class="file-input-hidden"
+           accept=".zip,.pdf" multiple />
+
+    <button class="btn btn-secondary" id="btn-import" title="Importar planilha existente">
+      📂 Importar XLSX/CSV
+    </button>
+    <input type="file" id="inp-import" class="file-input-hidden"
+           accept=".xlsx,.xls,.csv" />
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Search -->
+    <input type="text" id="search-box" class="search-box"
+           placeholder="🔍 Filtrar por título, ISBN, série…" />
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Actions -->
+    <button class="btn btn-ghost" id="btn-add" title="Adicionar título manualmente">
+      ➕ Adicionar
+    </button>
+    <button class="btn btn-danger" id="btn-delete" disabled title="Remover selecionados">
+      🗑 Remover
+    </button>
+
+    <div class="toolbar-sep"></div>
+
+    <!-- Export -->
+    <button class="btn btn-secondary" id="btn-export-excel" disabled>
+      📥 Excel
+    </button>
+    <button class="btn btn-secondary" id="btn-export-csv" disabled>
+      📄 CSV
+    </button>
+
+    <button class="btn btn-ghost" id="btn-clear" disabled
+            style="margin-left:auto" title="Limpar catálogo">
+      🗑 Limpar
+    </button>
+  </div>
+
+  <div class="grid-wrap">
+    <div id="catalog-grid" class="ag-theme-alpine"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- ABA: RESUMO                                                           -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-resumo">
+  <div class="resumo-panel" id="resumo-content">
+    <div class="resumo-empty">Nenhum dado carregado.<br>Use <strong>Upload ZIP/PDF</strong> ou <strong>Importar XLSX/CSV</strong> para começar.</div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- ABA: SOBRE                                                            -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<div class="tab-panel" id="tab-sobre">
+  <div class="sobre-panel">
+    <h2>Como usar</h2>
+
+    <h3>1. Upload de ZIP (recomendado)</h3>
+    <p>Clique em <strong>Upload ZIP/PDF</strong> e selecione o arquivo <code>.zip</code> com a estrutura de pastas intacta:</p>
+    <pre style="background:var(--blue-light);padding:12px;border-radius:8px;font-size:12px;margin:10px 0;overflow:auto">GRÁFICA EDUCAR/
+├── 1º ANO/
+│   └── MAT - EDUCAÇÃO DE QUALIDADE/
+│       └── Atividades/
+│           ├── 1º_ANO_INICIAIS_LA_*.pdf
+│           └── 1º_ANO_MIOLO_LA_*.pdf
+└── ...</pre>
+    <p>O sistema extrai metadados (ISBN, coleção, ilustradores, sinopse) automaticamente.</p>
+
+    <h3>2. Upload de PDFs avulsos</h3>
+    <p>Selecione arquivos <code>.pdf</code> diretamente. Série, tipo e tema são inferidos pelo nome do arquivo.
+    Resultado pode precisar de ajustes manuais.</p>
+
+    <h3>3. Importar planilha existente</h3>
+    <p>Clique em <strong>Importar XLSX/CSV</strong> para carregar um catálogo já exportado.
+    As colunas são mapeadas automaticamente.</p>
+
+    <h3>Edição inline</h3>
+    <p>Clique duas vezes em qualquer célula da tabela para editar. Use <strong>Adicionar</strong>
+    para inserir um título manualmente. Marque registros e clique <strong>Remover</strong> para deletar.</p>
+
+    <h3>Exportação</h3>
+    <ul>
+      <li><strong>Excel</strong> → <code>.xlsx</code> com 3 abas formatadas (Catálogo, Resumo, Por Faixa Etária)</li>
+      <li><strong>CSV</strong> → tabela plana em UTF-8 com BOM (compatível com Excel)</li>
+    </ul>
+
+    <h3>Limite de processamento</h3>
+    <p>Cada chamada ao LLM leva até 15 segundos. O Vercel tem timeout de 60s por request,
+    então envie no máximo 5 PDFs por vez (ou use o ZIP).</p>
+  </div>
+</div>
+
+<!-- ── Status bar ──────────────────────────────────────────────────────── -->
+<div class="status-bar">
+  <span id="status-records">📋 0 registros</span>
+  <span id="status-selected" style="display:none">☑️ <span id="status-sel-n">0</span> selecionados</span>
+  <span id="status-msg" style="margin-left:auto"></span>
+</div>
+
+<!-- ── Modal: Adicionar título ─────────────────────────────────────────── -->
+<div class="modal-overlay" id="modal-add">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>➕ Adicionar título manualmente</h3>
+      <button class="modal-close" data-close="modal-add">✕</button>
+    </div>
+    <div class="modal-body">
+      <form id="form-add" class="form-grid">
+        <div class="form-group full">
+          <label>Título *</label>
+          <input type="text" name="Título" required placeholder="Ex.: Educação de Qualidade - livro de atividades" />
+        </div>
+        <div class="form-group">
+          <label>Faixa etária / nível</label>
+          <select name="Faixa etária / nível">
+            <option value="">— selecionar —</option>
+            <option>Pré-Escola / Pré I</option>
+            <option>Pré-Escola / Pré II</option>
+            <option>1º Ano</option>
+            <option>2º Ano</option>
+            <option>3º Ano</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Coleção</label>
+          <input type="text" name="Coleção" />
+        </div>
+        <div class="form-group">
+          <label>Opção</label>
+          <input type="text" name="Opção" />
+        </div>
+        <div class="form-group">
+          <label>ISBN</label>
+          <input type="text" name="ISBN" placeholder="978-xx-xxxxx-xx-x" />
+        </div>
+        <div class="form-group">
+          <label>Ano de publicação</label>
+          <input type="text" name="Ano de publicação" placeholder="2024" />
+        </div>
+        <div class="form-group">
+          <label>Número de páginas</label>
+          <input type="number" name="Número de páginas" min="0" placeholder="0" />
+        </div>
+        <div class="form-group">
+          <label>Preço unitário (R$)</label>
+          <input type="number" name="Preço unitário" min="0" step="0.01" placeholder="0,00" />
+        </div>
+        <div class="form-group">
+          <label>Ilustrador(es) 1</label>
+          <input type="text" name="Ilustrador(es) 1" />
+        </div>
+        <div class="form-group">
+          <label>Ilustrador(es) 2</label>
+          <input type="text" name="Ilustrador(es) 2" />
+        </div>
+        <div class="form-group full">
+          <label>Sinopse</label>
+          <textarea name="Sinopse" placeholder="Assuntos: 1. Matemática. 2. Educação básica."></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Material de apoio pedagógico</label>
+          <input type="text" name="Material de apoio pedagógico" />
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" data-close="modal-add">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-add">Adicionar ao catálogo</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Spinner ─────────────────────────────────────────────────────────── -->
+<div id="spinner">
+  <div class="spinner-ring"></div>
+  <span id="spinner-msg">Processando…</span>
+</div>
+
+<!-- ── Toast container ─────────────────────────────────────────────────── -->
+<div id="toast-container"></div>
+
+<!-- ── Scripts ────────────────────────────────────────────────────────── -->
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@33.0.0/dist/ag-grid-community.noStyle.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
