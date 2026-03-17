@@ -45,7 +45,7 @@ EMPTY_RECORD = {col: "" for col in COLUMNS}
 # Colunas obrigatórias (sempre visíveis) e opcionais (podem ser escondidas)
 CORE_COLS = ["Item", "Faixa etária / nível", "Título", "Número de páginas"]
 OPTIONAL_COLS = [
-    "Opção", "Coleção", "Ilustrador(es) 1", "Ilustrador(es) 2",
+    "Opção", "Coleção", "Autor(es)", "Ilustrador(es) 1", "Ilustrador(es) 2",
     "ISBN", "Ano de publicação", "Sinopse", "Preço unitário",
     "Material de apoio pedagógico",
 ]
@@ -469,6 +469,7 @@ def _process_pdfs(uploaded_files):
                 "Coleção":                     meta.get("colecao", ""),
                 "Faixa etária / nível":        serie,
                 "Título":                      f"{tema} - {tipo}" if tema and tipo else tema or tipo,
+                "Autor(es)":                   meta.get("autor", ""),
                 "Ilustrador(es) 1":            meta.get("ilustradores_1", ""),
                 "Ilustrador(es) 2":            meta.get("ilustradores_2", ""),
                 "ISBN":                        meta.get("isbn", ""),
@@ -756,6 +757,7 @@ def main():
                 "Coleção":                     st.column_config.TextColumn(width="medium"),
                 "Faixa etária / nível":        st.column_config.TextColumn(width="medium"),
                 "Título":                      st.column_config.TextColumn(width="large"),
+                "Autor(es)":                   st.column_config.TextColumn(width="medium"),
                 "Ilustrador(es) 1":            st.column_config.TextColumn(width="medium"),
                 "Ilustrador(es) 2":            st.column_config.TextColumn(width="medium"),
                 "ISBN":                        st.column_config.TextColumn(width="medium"),
@@ -802,6 +804,7 @@ def main():
                     f_ano    = st.text_input("Ano de publicação")
                     f_paginas = st.number_input("Nº de páginas", min_value=0, step=1)
                     f_preco  = st.number_input("Preço unitário (R$)", min_value=0.0, format="%.2f")
+                    f_autor  = st.text_input("Autor(es)")
                     f_ilu1   = st.text_input("Ilustrador(es) 1")
                     f_ilu2   = st.text_input("Ilustrador(es) 2")
                 f_sinopse = st.text_area("Sinopse", height=80)
@@ -821,6 +824,7 @@ def main():
                         new_r["Ano de publicação"]            = f_ano.strip()
                         new_r["Número de páginas"]            = f_paginas or ""
                         new_r["Preço unitário"]               = f_preco or ""
+                        new_r["Autor(es)"]                    = f_autor.strip()
                         new_r["Ilustrador(es) 1"]             = f_ilu1.strip()
                         new_r["Ilustrador(es) 2"]             = f_ilu2.strip()
                         new_r["Sinopse"]                      = f_sinopse.strip()

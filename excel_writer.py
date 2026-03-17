@@ -12,6 +12,7 @@ COLUMNS = [
     "Coleção",
     "Faixa etária / nível",
     "Título",
+    "Autor(es)",
     "Ilustrador(es) 1",
     "Ilustrador(es) 2",
     "ISBN",
@@ -22,7 +23,7 @@ COLUMNS = [
     "Material de apoio pedagógico",
 ]
 
-COL_WIDTHS = [8, 8, 22, 22, 44, 30, 30, 20, 18, 16, 60, 16, 34]
+COL_WIDTHS = [8, 8, 22, 22, 44, 30, 30, 30, 20, 18, 16, 60, 16, 34]
 
 COR_HEADER_BG   = "1F4E79"
 COR_HEADER_FG   = "FFFFFF"

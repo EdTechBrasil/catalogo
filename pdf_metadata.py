@@ -92,7 +92,7 @@ SYSTEM_PROMPT = """Você é um especialista sênior em catalogação bibliográf
 
 ## Schema de saída obrigatório
 
-{"isbn": "", "ano": "", "colecao": "", "ilustradores_1": "", "ilustradores_2": "", "sinopse": ""}"""
+{"isbn": "", "ano": "", "colecao": "", "autor": "", "ilustradores_1": "", "ilustradores_2": "", "sinopse": ""}"""
 
 
 def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
@@ -110,6 +110,7 @@ NÃO invente — retorne "" se não encontrar.
 - isbn: número ISBN (ex: "978-65-99999-00-0")
 - ano: ano de publicação com 4 dígitos (ex: "2023")
 - colecao: nome da coleção entre parênteses na ficha CIP
+- autor: nome(s) do(s) autor(es) / organizador(es) da obra, separados por vírgula
 - ilustradores_1: nomes do primeiro grupo de ilustradores, separados por vírgula
 - ilustradores_2: nomes do segundo grupo de ilustradores (se houver)
 
@@ -208,6 +209,19 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
         if sinopse_match:
             meta["sinopse"] = re.sub(r"\s+", " ", sinopse_match.group(1)).strip()
 
+    # Autor / organizador
+    if not meta.get("autor"):
+        autor_match = re.search(
+            r"(?:Texto|Autori[ae]|Autor[ae]?s?|Organiza[çc][aã]o)[:\s]+([^\n]+(?:\n[^\n]+){0,2})",
+            "\n".join(left_lines), re.IGNORECASE,
+        )
+        if autor_match:
+            names = [
+                n.strip() for n in re.split(r"[,\n]", autor_match.group(1))
+                if n.strip() and not any(h in n for h in SECTION_HEADERS)
+            ]
+            meta["autor"] = ", ".join(names)
+
     # Ilustradores (apenas se ambos vazios)
     if not meta["ilustradores_1"]:
         all_ilu = _extract_illustrators_from_lines(left_lines)
@@ -232,6 +246,7 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
         "isbn": "",
         "ano": "",
         "colecao": "",
+        "autor": "",
         "ilustradores_1": "",
         "ilustradores_2": "",
         "sinopse": "",
@@ -272,12 +287,13 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
                 meta["isbn"]           = llm_result.get("isbn", "")
                 meta["ano"]            = llm_result.get("ano", "")
                 meta["colecao"]        = llm_result.get("colecao", "")
+                meta["autor"]          = llm_result.get("autor", "")
                 meta["sinopse"]        = llm_result.get("sinopse", "")
                 meta["ilustradores_1"] = llm_result.get("ilustradores_1", "")
                 meta["ilustradores_2"] = llm_result.get("ilustradores_2", "")
 
             # Complementa campos ainda vazios com regex (híbrido LLM + regex)
-            if any(not meta[k] for k in ("isbn", "ano", "colecao", "sinopse", "ilustradores_1")):
+            if any(not meta[k] for k in ("isbn", "ano", "colecao", "autor", "sinopse", "ilustradores_1")):
                 left_lines, right_lines = _group_words_into_lines(words)
                 _extract_via_regex_fill_gaps(meta, words, left_lines, right_lines)
 
@@ -332,6 +348,20 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
         if sinopse_match:
             meta["sinopse"] = re.sub(r"\s+", " ", sinopse_match.group(1)).strip()
 
+    # Autor / organizador
+    if not meta.get("autor"):
+        autor_match = re.search(
+            r"(?:Texto|Autori[ae]|Autor[ae]?s?|Organiza[çc][aã]o)[:\s]+([^\n]+(?:\n[^\n]+){0,2})",
+            text, re.IGNORECASE,
+        )
+        if autor_match:
+            names = [
+                n.strip() for n in re.split(r"[,\n]", autor_match.group(1))
+                if n.strip() and not any(h in n for h in SECTION_HEADERS)
+            ]
+            if names:
+                meta["autor"] = ", ".join(names)
+
     # Ilustradores
     if not meta["ilustradores_1"]:
         ilu_match = re.search(
@@ -356,7 +386,7 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
     (sem abrir o PDF — usado quando a extração é feita no browser).
     """
     meta = {
-        "isbn": "", "ano": "", "colecao": "",
+        "isbn": "", "ano": "", "colecao": "", "autor": "",
         "ilustradores_1": "", "ilustradores_2": "", "sinopse": "",
     }
 
@@ -370,11 +400,12 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
         meta["isbn"]           = llm_result.get("isbn", "")
         meta["ano"]            = llm_result.get("ano", "")
         meta["colecao"]        = llm_result.get("colecao", "")
+        meta["autor"]          = llm_result.get("autor", "")
         meta["sinopse"]        = llm_result.get("sinopse", "")
         meta["ilustradores_1"] = llm_result.get("ilustradores_1", "")
         meta["ilustradores_2"] = llm_result.get("ilustradores_2", "")
 
-    if any(not meta[k] for k in ("isbn", "ano", "colecao", "sinopse", "ilustradores_1")):
+    if any(not meta[k] for k in ("isbn", "ano", "colecao", "autor", "sinopse", "ilustradores_1")):
         _extract_via_regex_text(meta, cip_text)
 
     return meta
