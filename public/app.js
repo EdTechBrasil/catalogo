@@ -84,8 +84,7 @@ function initGrid() {
   const gridOptions = {
     columnDefs: COL_DEFS,
     rowData: [],
-    rowSelection: "multiple",
-    suppressRowClickSelection: true,
+    rowSelection: { mode: "multiRow", enableClickSelection: false },
     defaultColDef: {
       resizable: true,
       sortable: true,
