@@ -181,8 +181,9 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");
     setStatus(`Carregado: ${files.map(f => f.name).join(", ")}`);
   } catch (err) {
-    toast(`Erro ao processar: ${err.message}`, "error", 6000);
-    setStatus("Erro ao processar");
+    const msg = err.message || "erro desconhecido";
+    toast(`Erro ao processar: ${msg}`, "error", 12000);
+    setStatus(`Erro: ${msg.slice(0, 80)}`);
   } finally {
     hideSpinner();
   }

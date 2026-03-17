@@ -120,6 +120,16 @@ async def upload_files(files: list[UploadFile] = File(...)):
     Se houver ZIP, extrai e chama scan_and_group.
     Se forem PDFs avulsos, agrupa por nome de arquivo.
     """
+    try:
+        return await _do_upload(files)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+
+
+async def _do_upload(files: list[UploadFile]):
     zips = [f for f in files if f.filename.lower().endswith(".zip")]
     pdfs = [f for f in files if f.filename.lower().endswith(".pdf")]
 
