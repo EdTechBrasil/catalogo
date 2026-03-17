@@ -34,6 +34,24 @@ function renumber(records) {
   return records.map((r, i) => ({ ...r, Item: i + 1 }));
 }
 
+function dedup(records) {
+  const seen = new Set();
+  return records.filter(r => {
+    const key = r["ISBN"] && r["ISBN"].trim()
+      ? r["ISBN"].trim()
+      : `${r["Título"]}||${r["Faixa etária / nível"]}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const LS_KEY = "catalog_records";
+
+function saveState() {
+  localStorage.setItem(LS_KEY, JSON.stringify(State.records));
+}
+
 function showSpinner(msg = "Processando…") {
   document.getElementById("spinner").classList.add("active");
   document.getElementById("spinner-msg").textContent = msg;
@@ -252,7 +270,8 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
       throw new Error(detail);
     }
     const data = await res.json();
-    State.records = renumber([...State.records, ...data.records]);
+    State.records = renumber(dedup([...State.records, ...data.records]));
+    saveState();
     refreshGrid();
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");
     setStatus(`Carregado: ${files.map(f => f.name).join(", ")}`);
@@ -288,6 +307,7 @@ document.getElementById("inp-import").addEventListener("change", async (e) => {
     }
     const data = await res.json();
     State.records = data.records;
+    saveState();
     refreshGrid();
     toast(`✅ ${State.records.length} registro(s) importado(s) de "${file.name}"`, "success");
     setStatus(`Importado: ${file.name}`);
@@ -304,6 +324,7 @@ document.getElementById("inp-import").addEventListener("change", async (e) => {
 document.getElementById("btn-delete").addEventListener("click", () => {
   const selectedItems = new Set(State.selectedRows.map(r => r.Item));
   State.records = renumber(State.records.filter(r => !selectedItems.has(r.Item)));
+  saveState();
   State.selectedRows = [];
   refreshGrid();
   toast(`🗑 Registros removidos`, "info");
@@ -314,6 +335,7 @@ document.getElementById("btn-delete").addEventListener("click", () => {
 document.getElementById("btn-clear").addEventListener("click", () => {
   if (!confirm("Tem certeza que deseja limpar todo o catálogo?")) return;
   State.records = [];
+  saveState();
   State.selectedRows = [];
   refreshGrid();
   toast("Catálogo limpo", "info");
@@ -385,6 +407,7 @@ document.getElementById("btn-confirm-add").addEventListener("click", () => {
   rec.Item = State.records.length + 1;
 
   State.records = [...State.records, rec];
+  saveState();
   refreshGrid();
   document.getElementById("modal-add").classList.remove("open");
   toast(`✅ "${rec["Título"]}" adicionado`, "success");
@@ -487,4 +510,15 @@ function renderResumo() {
 
 initTabs();
 initGrid();
+(function restoreState() {
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) {
+    try {
+      State.records = JSON.parse(saved);
+      refreshGrid();
+    } catch (_) {
+      localStorage.removeItem(LS_KEY);
+    }
+  }
+})();
 updateUIState();
