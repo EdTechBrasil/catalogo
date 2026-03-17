@@ -95,6 +95,12 @@ def _infer_from_filename(name: str) -> dict:
             tipo = val
             break
 
+    variante = ""
+    for v in ("LA", "LP"):
+        if v in parts:
+            variante = v
+            break
+
     skip = {"INICIAIS", "MIOLO", "LA", "LP", "ATV", "DES", "ILU", "TAP",
             "PRÉ", "PRE", "1", "2", "3", "ANO"}
     for k in SERIE_KEYWORDS:
@@ -102,7 +108,7 @@ def _infer_from_filename(name: str) -> dict:
     tema_parts = [p for p in parts if p not in skip and len(p) > 1]
     tema = " ".join(tema_parts).title()
 
-    return {"serie": serie, "tipo": tipo, "tema": tema}
+    return {"serie": serie, "tipo": tipo, "tema": tema, "variante": variante}
 
 
 def _renumber(records: list[dict]) -> list[dict]:
@@ -149,7 +155,7 @@ async def _do_upload(files: list[UploadFile]):
         for uf in pdfs:
             content = await uf.read()
             info = _infer_from_filename(uf.filename)
-            key = (info["serie"], info["tipo"], info["tema"])
+            key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
                 groups[key] = {"iniciais": None, "miolo": None, "uf": [], "content": {}}
             groups[key]["uf"].append(uf.filename)
@@ -161,7 +167,7 @@ async def _do_upload(files: list[UploadFile]):
                 groups[key]["miolo"] = uf.filename
 
         with tempfile.TemporaryDirectory() as tmpdir:
-            for (serie, tipo, tema), g in groups.items():
+            for (serie, tipo, tema, _variante), g in groups.items():
                 all_names = list(g["content"].keys())
                 meta_name = g["iniciais"] or (all_names[0] if all_names else None)
                 pages_name = g["miolo"] or meta_name
@@ -278,7 +284,7 @@ async def process_text(payload: ProcessTextPayload):
 
         for item in payload.files:
             info = _infer_from_filename(item.filename)
-            key = (info["serie"], info["tipo"], info["tema"])
+            key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
                 groups[key] = {"iniciais_text": "", "content_text": "", "page_count": 0}
 
@@ -295,7 +301,7 @@ async def process_text(payload: ProcessTextPayload):
                     groups[key]["page_count"] = item.page_count
 
         records = []
-        for (serie, tipo, tema), g in groups.items():
+        for (serie, tipo, tema, _variante), g in groups.items():
             meta = extract_metadata_from_text(g["iniciais_text"], g["content_text"])
             titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
             records.append({
