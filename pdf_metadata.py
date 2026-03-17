@@ -285,3 +285,96 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
         print(f"  [AVISO] Erro ao extrair metadados de {iniciais_pdf_path}: {e}")
 
     return meta
+
+
+def _extract_via_regex_text(meta: dict, text: str) -> None:
+    """Preenche campos vazios via regex em texto plano (sem layout de colunas)."""
+
+    # ISBN
+    if not meta["isbn"]:
+        cip_nospace = re.sub(r"(?<=\d) (?=\d)", "", text)
+        isbn_match = re.search(
+            r"ISBN[:\s]+([\d][\d\-]{11,}[\d])(?:\s|\(|$)", cip_nospace, re.IGNORECASE
+        )
+        if isbn_match:
+            meta["isbn"] = isbn_match.group(1).strip()
+        else:
+            nospace = re.sub(r"\s+", "", text)
+            isbn_match2 = re.search(r"ISBN:?([\d][\d\-]{11,}[\d])", nospace, re.IGNORECASE)
+            if isbn_match2:
+                raw = isbn_match2.group(1)
+                digits = re.sub(r"\D", "", raw)[:13]
+                if len(digits) == 13:
+                    meta["isbn"] = f"{digits[:3]}-{digits[3:5]}-{digits[5:10]}-{digits[10:12]}-{digits[12]}"
+
+    # Ano
+    if not meta["ano"]:
+        year_match = re.search(r"\b(20\d{2})\b", text)
+        if year_match:
+            meta["ano"] = year_match.group(1)
+
+    # Coleção
+    if not meta["colecao"]:
+        colecao_match = re.search(r"\(([Mm]eu\s+[Pp]rimeiro\s+[Cc][oó]digo[^)]*)\)", text)
+        if colecao_match:
+            meta["colecao"] = "Meu Primeiro Código"
+        else:
+            colecao_match2 = re.search(r"p\.\s*:.*?[–\-]\s*\(([^)]+)\)", text)
+            if colecao_match2:
+                meta["colecao"] = colecao_match2.group(1).replace("Projeto ", "").strip()
+
+    # Sinopse
+    if not meta["sinopse"]:
+        sinopse_match = re.search(
+            r"(1\.\s+(?!ed\.\s)(?!a\s+ed)[A-ZÀ-Ú].+?)(?:\s+I\.\s+|\s+CDD\s+|\s+Índices)",
+            text, re.DOTALL,
+        )
+        if sinopse_match:
+            meta["sinopse"] = re.sub(r"\s+", " ", sinopse_match.group(1)).strip()
+
+    # Ilustradores
+    if not meta["ilustradores_1"]:
+        ilu_match = re.search(
+            r"Ilustra[çc][aã]o[:\s]+([^\n]+(?:\n[^\n]+){0,3})", text
+        )
+        if ilu_match:
+            names = [
+                n.strip() for n in re.split(r"[,\n]", ilu_match.group(1))
+                if n.strip() and len(n.strip()) > 2
+                and not any(h in n for h in SECTION_HEADERS)
+            ]
+            if names:
+                mid = len(names) // 2 if len(names) > 2 else len(names)
+                meta["ilustradores_1"] = ", ".join(names[:mid])
+                if len(names) > mid:
+                    meta["ilustradores_2"] = ", ".join(names[mid:])
+
+
+def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
+    """
+    Versão de extract_metadata que opera sobre texto já extraído
+    (sem abrir o PDF — usado quando a extração é feita no browser).
+    """
+    meta = {
+        "isbn": "", "ano": "", "colecao": "",
+        "ilustradores_1": "", "ilustradores_2": "", "sinopse": "",
+    }
+
+    if not cip_text.strip():
+        return meta
+
+    llm_result = _extract_via_llm(cip_text, content_text)
+    print(f"  [LLM] {'OK' if llm_result else 'FALHOU'} — (text input)")
+
+    if llm_result:
+        meta["isbn"]           = llm_result.get("isbn", "")
+        meta["ano"]            = llm_result.get("ano", "")
+        meta["colecao"]        = llm_result.get("colecao", "")
+        meta["sinopse"]        = llm_result.get("sinopse", "")
+        meta["ilustradores_1"] = llm_result.get("ilustradores_1", "")
+        meta["ilustradores_2"] = llm_result.get("ilustradores_2", "")
+
+    if any(not meta[k] for k in ("isbn", "ano", "colecao", "sinopse", "ilustradores_1")):
+        _extract_via_regex_text(meta, cip_text)
+
+    return meta

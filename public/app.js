@@ -5,6 +5,12 @@
 
 const API_BASE = "";
 
+// PDF.js worker
+if (typeof pdfjsLib !== "undefined") {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+}
+
 const COLUMNS = [
   "Item", "Opção", "Coleção", "Faixa etária / nível", "Título",
   "Ilustrador(es) 1", "Ilustrador(es) 2", "ISBN", "Ano de publicação",
@@ -153,6 +159,52 @@ function initTabs() {
   });
 }
 
+// ── PDF client-side extraction ────────────────────────────────────────────────
+
+async function extractPdfText(arrayBuffer) {
+  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+  const pdf = await loadingTask.promise;
+  const pageTexts = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const lineMap = {};
+    for (const item of content.items) {
+      if (!item.str) continue;
+      const y = Math.round(item.transform[5]);
+      if (!lineMap[y]) lineMap[y] = [];
+      lineMap[y].push({ x: item.transform[4], str: item.str });
+    }
+    const lines = Object.keys(lineMap)
+      .sort((a, b) => Number(b) - Number(a))
+      .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
+    pageTexts.push(lines.join("\n"));
+  }
+  return { text: pageTexts.join("\n"), pageCount: pdf.numPages };
+}
+
+async function extractZipTexts(file) {
+  const zip = await JSZip.loadAsync(file);
+  const results = [];
+  const pdfEntries = [];
+  zip.forEach((path, entry) => {
+    if (!entry.dir && path.toLowerCase().endsWith(".pdf") && !path.startsWith("__MACOSX")) {
+      pdfEntries.push({ path, entry });
+    }
+  });
+  for (const { path, entry } of pdfEntries) {
+    try {
+      const ab = await entry.async("arraybuffer");
+      const { text, pageCount } = await extractPdfText(ab);
+      const filename = path.split("/").pop();
+      results.push({ filename, text, page_count: pageCount });
+    } catch (err) {
+      console.warn(`Erro ao processar ${path}:`, err);
+    }
+  }
+  return results;
+}
+
 // ── Upload ────────────────────────────────────────────────────────────────────
 
 document.getElementById("btn-upload").addEventListener("click", () => {
@@ -164,13 +216,35 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
   if (!files.length) return;
   e.target.value = "";
 
-  const fd = new FormData();
-  files.forEach(f => fd.append("files", f));
-
-  showSpinner("Processando arquivos… (pode levar até 60s)");
-  setStatus("Enviando…");
+  showSpinner("Extraindo texto dos PDFs… (pode demorar)");
+  setStatus("Processando…");
   try {
-    const res = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
+    const fileTexts = [];
+
+    for (const file of files) {
+      const nameLow = file.name.toLowerCase();
+      if (nameLow.endsWith(".zip")) {
+        showSpinner(`Descompactando ${file.name}…`);
+        const zipTexts = await extractZipTexts(file);
+        fileTexts.push(...zipTexts);
+      } else if (nameLow.endsWith(".pdf")) {
+        showSpinner(`Extraindo texto: ${file.name}`);
+        const { text, pageCount } = await extractPdfText(await file.arrayBuffer());
+        fileTexts.push({ filename: file.name, text, page_count: pageCount });
+      }
+    }
+
+    if (!fileTexts.length) {
+      throw new Error("Nenhum PDF encontrado nos arquivos selecionados.");
+    }
+
+    showSpinner(`Extraindo metadados via IA… (${fileTexts.length} PDF(s))`);
+
+    const res = await fetch(`${API_BASE}/api/process-text`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ files: fileTexts }),
+    });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       let detail = `HTTP ${res.status}`;

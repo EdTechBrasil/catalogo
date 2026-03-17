@@ -23,7 +23,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from excel_writer import COLUMNS, write_excel_to_bytes
-from pdf_metadata import extract_metadata
+from pdf_metadata import extract_metadata, extract_metadata_from_text
 from pdf_reader import get_page_count
 from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
@@ -256,6 +256,71 @@ async def import_file(file: UploadFile = File(...)):
 
 class ExportBody(BaseModel):
     records: list[dict]
+
+
+class FileText(BaseModel):
+    filename: str
+    text: str
+    page_count: int = 0
+
+class ProcessTextPayload(BaseModel):
+    files: list[FileText]
+
+
+@app.post("/api/process-text")
+async def process_text(payload: ProcessTextPayload):
+    """
+    Recebe texto já extraído dos PDFs (extração feita no browser).
+    Agrupa por (serie, tipo, tema), chama LLM + regex, retorna records[].
+    """
+    try:
+        groups: dict[tuple, dict] = {}
+
+        for item in payload.files:
+            info = _infer_from_filename(item.filename)
+            key = (info["serie"], info["tipo"], info["tema"])
+            if key not in groups:
+                groups[key] = {"iniciais_text": "", "content_text": "", "page_count": 0}
+
+            name_up = item.filename.upper()
+            if "INICIAIS" in name_up:
+                groups[key]["iniciais_text"] = item.text
+            elif "MIOLO" in name_up:
+                groups[key]["content_text"] = item.text[:2000]
+                groups[key]["page_count"] = item.page_count
+            else:
+                if not groups[key]["iniciais_text"]:
+                    groups[key]["iniciais_text"] = item.text
+                if not groups[key]["page_count"]:
+                    groups[key]["page_count"] = item.page_count
+
+        records = []
+        for (serie, tipo, tema), g in groups.items():
+            meta = extract_metadata_from_text(g["iniciais_text"], g["content_text"])
+            titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
+            records.append({
+                "Item":                        len(records) + 1,
+                "Opção":                       1,
+                "Coleção":                     meta.get("colecao", ""),
+                "Faixa etária / nível":        serie,
+                "Título":                      titulo,
+                "Ilustrador(es) 1":            meta.get("ilustradores_1", ""),
+                "Ilustrador(es) 2":            meta.get("ilustradores_2", ""),
+                "ISBN":                        meta.get("isbn", ""),
+                "Ano de publicação":           meta.get("ano", ""),
+                "Número de páginas":           g["page_count"],
+                "Sinopse":                     meta.get("sinopse", ""),
+                "Preço unitário":              "",
+                "Material de apoio pedagógico": "",
+            })
+
+        return {"records": _renumber(records)}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
 
 
 @app.post("/api/export/excel")
