@@ -33,14 +33,14 @@
 
   <div class="toolbar">
     <!-- Upload / Import -->
-    <button class="btn btn-primary" id="btn-upload" title="Upload de ZIP ou PDFs">
-      ⬆️ Upload ZIP/PDF
+    <button class="btn btn-primary" id="btn-upload" title="Selecione um .zip com a estrutura de pastas, ou PDFs avulsos, para processar e extrair metadados">
+      ⬆️ Processar PDFs / ZIP
     </button>
     <input type="file" id="inp-upload" class="file-input-hidden"
            accept=".zip,.pdf" multiple />
 
-    <button class="btn btn-secondary" id="btn-import" title="Importar planilha existente">
-      📂 Importar XLSX/CSV
+    <button class="btn btn-secondary" id="btn-import" title="Carregue uma planilha já exportada (.xlsx ou .csv) — não serve para PDFs">
+      📂 Importar planilha (XLSX/CSV)
     </button>
     <input type="file" id="inp-import" class="file-input-hidden"
            accept=".xlsx,.xls,.csv" />
@@ -87,7 +87,7 @@
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <div class="tab-panel" id="tab-resumo">
   <div class="resumo-panel" id="resumo-content">
-    <div class="resumo-empty">Nenhum dado carregado.<br>Use <strong>Upload ZIP/PDF</strong> ou <strong>Importar XLSX/CSV</strong> para começar.</div>
+    <div class="resumo-empty">Nenhum dado carregado.<br>Use <strong>Processar PDFs / ZIP</strong> ou <strong>Importar planilha (XLSX/CSV)</strong> para começar.</div>
   </div>
 </div>
 
@@ -99,7 +99,7 @@
     <h2>Como usar</h2>
 
     <h3>1. Upload de ZIP (recomendado)</h3>
-    <p>Clique em <strong>Upload ZIP/PDF</strong> e selecione o arquivo <code>.zip</code> com a estrutura de pastas intacta:</p>
+    <p>Clique em <strong>Processar PDFs / ZIP</strong> e selecione o arquivo <code>.zip</code> com a estrutura de pastas intacta:</p>
     <pre style="background:var(--blue-light);padding:12px;border-radius:8px;font-size:12px;margin:10px 0;overflow:auto">GRÁFICA EDUCAR/
 ├── 1º ANO/
 │   └── MAT - EDUCAÇÃO DE QUALIDADE/
@@ -114,8 +114,8 @@
     Resultado pode precisar de ajustes manuais.</p>
 
     <h3>3. Importar planilha existente</h3>
-    <p>Clique em <strong>Importar XLSX/CSV</strong> para carregar um catálogo já exportado.
-    As colunas são mapeadas automaticamente.</p>
+    <p>Clique em <strong>Importar planilha (XLSX/CSV)</strong> para carregar um catálogo já exportado.
+    As colunas são mapeadas automaticamente. <em>Não serve para PDFs.</em></p>
 
     <h3>Edição inline</h3>
     <p>Clique duas vezes em qualquer célula da tabela para editar. Use <strong>Adicionar</strong>

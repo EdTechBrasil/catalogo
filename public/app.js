@@ -82,6 +82,7 @@ const COL_DEFS = [
 
 function initGrid() {
   const gridOptions = {
+    theme: "legacy",
     columnDefs: COL_DEFS,
     rowData: [],
     rowSelection: { mode: "multiRow", enableClickSelection: false },
