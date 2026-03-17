@@ -71,7 +71,7 @@ def _clean_cip_text(right_lines: list[str]) -> str:
 # LLM via TESS IA (OpenAI-compatible endpoint)
 # ---------------------------------------------------------------------------
 
-TESS_API_KEY    = os.environ.get("TESS_API_KEY", "")
+TESS_API_KEY    = os.environ.get("TESS_API_KEY", "603628|8M6zIovdmUSxFTAEXnTBHSiCCcHGwb2WCXdu3ZG755e2b4e8")
 TESS_AGENT_ID   = 41394
 TESS_MODEL      = "claude-4.5-haiku"
 TESS_ENDPOINT   = f"https://api.tess.im/agents/{TESS_AGENT_ID}/openai/chat/completions"
