@@ -252,7 +252,7 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
       throw new Error(detail);
     }
     const data = await res.json();
-    State.records = renumber(data.records);
+    State.records = renumber([...State.records, ...data.records]);
     refreshGrid();
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");
     setStatus(`Carregado: ${files.map(f => f.name).join(", ")}`);
