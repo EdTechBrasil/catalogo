@@ -172,8 +172,10 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
   try {
     const res = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || res.statusText);
+      const text = await res.text().catch(() => "");
+      let detail = `HTTP ${res.status}`;
+      try { detail = JSON.parse(text).detail || detail; } catch { detail = text.slice(0, 300) || detail; }
+      throw new Error(detail);
     }
     const data = await res.json();
     State.records = renumber(data.records);
