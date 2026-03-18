@@ -13,7 +13,7 @@ if (typeof pdfjsLib !== "undefined") {
 
 const COLUMNS = [
   "Item", "Opção", "Coleção", "Faixa etária / nível", "Título",
-  "Ilustrador(es) 1", "Ilustrador(es) 2", "ISBN", "Ano de publicação",
+  "Autor(es)", "Ilustrador(es) 1", "Ilustrador(es) 2", "ISBN", "Ano de publicação",
   "Número de páginas", "Sinopse", "Preço unitário", "Material de apoio pedagógico",
 ];
 
@@ -94,6 +94,7 @@ const COL_DEFS = [
   { field: "Coleção",                width: 180, editable: true },
   { field: "Faixa etária / nível",   width: 160, editable: true },
   { field: "Título",                 width: 340, editable: true },
+  { field: "Autor(es)",              width: 200, editable: true },
   { field: "Ilustrador(es) 1",       width: 200, editable: true },
   { field: "Ilustrador(es) 2",       width: 200, editable: true },
   { field: "ISBN",                   width: 160, editable: true },
