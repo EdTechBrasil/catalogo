@@ -26,6 +26,5 @@ __pycache__/
 .vscode/
 .idea/
 
-# Claude Code
-CLAUDE.md
+# Vercel
 .vercel
