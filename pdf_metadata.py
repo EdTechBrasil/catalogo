@@ -109,7 +109,11 @@ def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
 Procure em QUALQUER parte do texto pelos campos abaixo.
 NÃO invente — retorne "" se genuinamente não encontrar.
 
-- isbn: número ISBN-13 no formato canônico "XXX-XX-XXXXX-XX-X"
+- isbn: ISBN-13 com 13 dígitos no formato canônico "XXX-XX-XXXXX-XX-X".
+  Procure no bloco "Dados Internacionais de Catalogação" ou após "ISBN".
+  Normalize separadores variados (espaço, ponto, en-dash) para hífen "-".
+  Se houver ISBN-10 e ISBN-13, prefira o ISBN-13.
+  IMPORTANTE: retorne SOMENTE os dígitos formatados com hífens, sem texto adicional.
 - ano: ano de publicação com 4 dígitos (ex: "2023")
 - colecao: nome da coleção ou série editorial (entre parênteses ou após "Coleção" / "Série")
 - autor: nome(s) do(s) autor(es) / organizador(es) da obra, separados por vírgula
