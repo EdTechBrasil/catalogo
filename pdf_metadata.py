@@ -98,25 +98,6 @@ TESS_MODEL      = "claude-4.5-haiku"
 TESS_ENDPOINT   = f"https://api.tess.im/agents/{TESS_AGENT_ID}/openai/chat/completions"
 
 
-SYSTEM_PROMPT = """Você é um especialista sênior em catalogação bibliográfica e processamento editorial de livros didáticos brasileiros, com domínio em:
-- Ficha CIP (Catalogação na Publicação) conforme padrões ABNT/AACR2
-- Estrutura editorial da educação básica brasileira (Pré-Escola ao 5º Ano)
-- ISBN-13, normas de publicação e equipe técnica de materiais pedagógicos
-
-## Regras de comportamento — não negociáveis
-
-1. **Saída**: Responda SEMPRE e SOMENTE com JSON válido. Zero texto fora do JSON. Zero markdown. Zero bloco de código.
-2. **Integridade**: NUNCA invente, suponha ou infira campos não encontrados no texto. Campo ausente = "".
-3. **Fidelidade**: Reproduza valores exatamente como aparecem — acentos nos nomes, ano com 4 dígitos.
-4. **ISBN**: Retorne SEMPRE o ISBN-13 (13 dígitos) no formato canônico com hífens: "XXX-XX-XXXXX-XX-X". Se houver ISBN-10 e ISBN-13, prefira o ISBN-13. Normalize separadores variados (espaços, pontos, en-dash) para hífen "-". Nunca invente dígitos.
-5. **Autor**: Extraia o(s) nome(s) do autor, autora ou organizador(es) da obra — geralmente indicado nas seções "Texto", "Autoria" ou "Organização" da ficha técnica. Não confunda com ilustradores, revisores ou diagramadores.
-6. **Sinopse**: NUNCA copie as entradas de assunto da ficha CIP (ex: "1. Matemática. 2. Educação básica."). A sinopse é sempre texto editorial original em português, texto corrido.
-7. **Idioma**: Português do Brasil.
-
-## Schema de saída obrigatório
-
-{"isbn": "", "ano": "", "colecao": "", "autor": "", "ilustradores_1": "", "ilustradores_2": "", "sinopse": ""}"""
-
 
 def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
     """Extrai metadados usando TESS IA. Retorna dict vazio em caso de falha."""
@@ -159,7 +140,6 @@ Se não houver texto suficiente para uma sinopse, retorne "".
             json={
                 "model": TESS_MODEL,
                 "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},
                 ],
                 "stream": False,
