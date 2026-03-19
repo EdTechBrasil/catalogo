@@ -300,7 +300,7 @@ async def process_text(payload: ProcessTextPayload):
             info = _infer_from_filename(item.filename)
             key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
-                groups[key] = {"iniciais_text": "", "content_text": "", "page_count": 0}
+                groups[key] = {"iniciais_text": "", "capa_text": "", "content_text": "", "page_count": 0}
 
             name_up = item.filename.upper()
             if "INICIAIS" in name_up:
@@ -309,6 +309,8 @@ async def process_text(payload: ProcessTextPayload):
                 groups[key]["content_text"] = item.text[:8000]
                 groups[key]["page_count"] = item.page_count
             elif "CAPA" in name_up:
+                if not groups[key]["capa_text"]:
+                    groups[key]["capa_text"] = item.text  # pode conter ficha CIP
                 if not groups[key]["page_count"]:
                     groups[key]["page_count"] = item.page_count
             else:
@@ -324,8 +326,13 @@ async def process_text(payload: ProcessTextPayload):
 
         async def _process_group(serie, tipo, tema, g):
             warning = None
-            # Se não há INICIAIS, usa o conteúdo do MIOLO como fonte de extração
-            effective_text = g["iniciais_text"] or g["content_text"]
+            if g["iniciais_text"]:
+                effective_text = g["iniciais_text"]
+            else:
+                # Sem INICIAIS: combinar CAPA + primeiras páginas do MIOLO
+                # A ficha CIP pode estar em qualquer uma das duas fontes
+                combined = "\n".join(filter(None, [g["capa_text"], g["content_text"]]))
+                effective_text = combined[:12000]
             try:
                 meta = await asyncio.wait_for(
                     extract_metadata_from_text_async(effective_text, g["content_text"]),
@@ -337,6 +344,9 @@ async def process_text(payload: ProcessTextPayload):
             except Exception as e:
                 meta = dict(_empty_meta)
                 warning = f"erro: {e}"
+            all_empty = not any(meta.get(k) for k in ("isbn", "ano", "colecao", "autor"))
+            if effective_text.strip() and all_empty and not warning:
+                warning = "LLM não encontrou metadados — verifique se o PDF contém ficha CIP em texto (não imagem)"
             titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
             record = {
                 "Item":                        0,
@@ -372,7 +382,7 @@ async def process_text(payload: ProcessTextPayload):
                 warnings.append({"titulo": r["Título"], "motivo": w})
 
         for (serie, tipo, tema, _variante), g in groups.items():
-            if not g["iniciais_text"].strip() and not g["content_text"].strip():
+            if not g["iniciais_text"].strip() and not g["capa_text"].strip() and not g["content_text"].strip():
                 titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
                 warnings.append({"titulo": titulo, "motivo": "texto vazio (PDF pode ser escaneado)"})
 
