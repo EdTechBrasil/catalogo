@@ -275,6 +275,10 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
     saveState();
     refreshGrid();
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");
+    if (data.warnings && data.warnings.length > 0) {
+      const msgs = data.warnings.map(w => `• ${w.titulo}: ${w.motivo}`).join("\n");
+      toast(`⚠️ ${data.warnings.length} PDF(s) sem extração completa:\n${msgs}`, "error", 10000);
+    }
     setStatus(`Carregado: ${files.map(f => f.name).join(", ")}`);
   } catch (err) {
     const msg = err.message || "erro desconhecido";

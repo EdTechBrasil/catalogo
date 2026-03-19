@@ -308,6 +308,7 @@ async def process_text(payload: ProcessTextPayload):
         }
 
         async def _process_group(serie, tipo, tema, g):
+            warning = None
             try:
                 meta = await asyncio.wait_for(
                     extract_metadata_from_text_async(g["iniciais_text"], g["content_text"]),
@@ -315,8 +316,12 @@ async def process_text(payload: ProcessTextPayload):
                 )
             except asyncio.TimeoutError:
                 meta = dict(_empty_meta)
+                warning = "timeout"
+            except Exception as e:
+                meta = dict(_empty_meta)
+                warning = f"erro: {e}"
             titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
-            return {
+            record = {
                 "Item":                        0,
                 "Opção":                       1,
                 "Coleção":                     meta.get("colecao", ""),
@@ -332,6 +337,9 @@ async def process_text(payload: ProcessTextPayload):
                 "Preço unitário":              "",
                 "Material de apoio pedagógico": "",
             }
+            if warning:
+                record["_warning"] = warning
+            return record
 
         tasks = [
             _process_group(serie, tipo, tema, g)
@@ -339,7 +347,19 @@ async def process_text(payload: ProcessTextPayload):
         ]
         records = list(await asyncio.gather(*tasks))
 
-        return {"records": _renumber(records)}
+        # Coletar avisos e avisar sobre PDFs sem texto
+        warnings = []
+        for r in records:
+            w = r.pop("_warning", None)
+            if w:
+                warnings.append({"titulo": r["Título"], "motivo": w})
+
+        for (serie, tipo, tema, _variante), g in groups.items():
+            if not g["iniciais_text"].strip():
+                titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
+                warnings.append({"titulo": titulo, "motivo": "texto vazio (PDF pode ser escaneado)"})
+
+        return {"records": _renumber(records), "warnings": warnings}
 
     except HTTPException:
         raise

@@ -122,31 +122,28 @@ def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
     """Extrai metadados usando TESS IA. Retorna dict vazio em caso de falha."""
     import requests
 
-    prompt = f"""Você receberá o texto extraído de um livro educacional da Gráfica Educar:
-- FICHA TÉCNICA: páginas iniciais (folha de rosto, ficha CIP)
-- AMOSTRA DO CONTEÚDO: primeiras páginas do miolo do livro
+    prompt = f"""Você receberá o texto extraído de um livro educacional da Gráfica Educar.
 
-## TAREFA 1 — Extração da ficha CIP
-Extraia os campos abaixo da FICHA TÉCNICA.
-NÃO invente — retorne "" se não encontrar.
+## TAREFA 1 — Extração de metadados bibliográficos
+Procure em QUALQUER parte do texto pelos campos abaixo.
+NÃO invente — retorne "" se genuinamente não encontrar.
 
-- isbn: número ISBN (ex: "978-65-99999-00-0")
+- isbn: número ISBN-13 no formato canônico "XXX-XX-XXXXX-XX-X"
 - ano: ano de publicação com 4 dígitos (ex: "2023")
-- colecao: nome da coleção entre parênteses na ficha CIP
+- colecao: nome da coleção ou série editorial (entre parênteses ou após "Coleção" / "Série")
 - autor: nome(s) do(s) autor(es) / organizador(es) da obra, separados por vírgula
+  Dica: procure seções "Texto", "Autoria", "Autor", "Organização", "Escrito por"
 - ilustradores_1: nomes do primeiro grupo de ilustradores, separados por vírgula
-- ilustradores_2: nomes do segundo grupo de ilustradores (se houver)
+  Dica: procure seções "Ilustração", "Ilustradores", "Desenhos"
+- ilustradores_2: segundo grupo de ilustradores, se houver
 
 ## TAREFA 2 — Sinopse editorial
-Com base em TODO o texto (ficha técnica + amostra do conteúdo), escreva
-uma sinopse de 2 a 3 frases para catálogo editorial descrevendo:
-- qual disciplina / tema o livro aborda
-- para qual faixa etária / nível escolar
-- a abordagem pedagógica ou característica marcante do material
+Com base em TODO o texto disponível, escreva uma sinopse de 2 a 3 frases para catálogo
+editorial descrevendo: disciplina/tema, faixa etária/nível escolar, abordagem pedagógica.
+Escreva em português, texto corrido. NÃO copie entradas bibliográficas.
+Se não houver texto suficiente para uma sinopse, retorne "".
 
-Escreva em português, texto corrido. NÃO copie as entradas da ficha CIP.
-
-=== FICHA TÉCNICA ===
+=== TEXTO DO DOCUMENTO ===
 {cip_text}
 
 === AMOSTRA DO CONTEÚDO ===
@@ -175,7 +172,13 @@ Escreva em português, texto corrido. NÃO copie as entradas da ficha CIP.
         raw = re.sub(r"\s*```$", "", raw)
         return json.loads(raw)
     except Exception as e:
-        print(f"  [AVISO] LLM falhou: {e}")
+        status = getattr(getattr(e, 'response', None), 'status_code', None)
+        body = ""
+        try:
+            body = e.response.text[:300]
+        except Exception:
+            pass
+        print(f"  [LLM ERRO] {type(e).__name__}: {e} | status={status} | resp={body!r}")
         return {}
 
 
@@ -421,6 +424,7 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
     }
 
     if not cip_text.strip():
+        print("  [LLM] Texto vazio — pulando extração")
         return meta
 
     llm_result = _extract_via_llm(cip_text, content_text)
