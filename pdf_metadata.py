@@ -179,8 +179,9 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
 
     # ISBN
     if not meta["isbn"]:
-        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", cip_text)
-        for candidate in (text_condensed, re.sub(r"\s+", "", cip_text)):
+        cip_isbn = re.sub(r"([0-9\-\.–])\n([0-9\-\.–])", r"\1\2", cip_text)
+        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", cip_isbn)
+        for candidate in (text_condensed, re.sub(r"\s+", "", cip_isbn)):
             matches = _ISBN_RE.findall(candidate)
             for raw in matches:
                 normalized = _normalize_isbn(raw)
@@ -205,6 +206,7 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
                     meta["isbn"] = normalized
 
     # Ano de publicação
+
     if not meta["ano"]:
         year_match = re.search(r"\b(20\d{2})\b", cip_clean)
         if year_match:
@@ -329,8 +331,9 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
 
     # ISBN
     if not meta["isbn"]:
-        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", text)
-        for candidate in (text_condensed, re.sub(r"\s+", "", text)):
+        text_isbn = re.sub(r"([0-9\-\.–])\n([0-9\-\.–])", r"\1\2", text)
+        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", text_isbn)
+        for candidate in (text_condensed, re.sub(r"\s+", "", text_isbn)):
             matches = _ISBN_RE.findall(candidate)
             for raw in matches:
                 normalized = _normalize_isbn(raw)
