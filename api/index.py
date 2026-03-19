@@ -115,7 +115,9 @@ def _infer_from_filename(name: str) -> dict:
         skip.update(k.split("_"))
     tema_parts = [
         p for p in parts
-        if p not in skip and len(p) > 1 and not re.match(r"^\d{4}$", p)
+        if p not in skip and len(p) > 1
+        and not re.match(r"^\d{4}$", p)
+        and not re.match(r"^\(\d+\)$", p)
     ]
     tema = " ".join(tema_parts).title()
 
