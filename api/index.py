@@ -50,6 +50,13 @@ SERIE_KEYWORDS = {
     "2_ANO": "2º Ano",
     "3º_ANO": "3º Ano",
     "3_ANO": "3º Ano",
+    # Série G (Grupos Pré-Escola)
+    "G1": "Grupo 1 (Pré-Escola)",
+    "G2": "Grupo 2 (Pré-Escola)",
+    "G3": "Grupo 3 (Pré-Escola)",
+    "G4": "Grupo 4 (Pré-Escola)",
+    "G5": "Grupo 5 (Pré-Escola)",
+    "G6": "Grupo 6 (Pré-Escola)",
 }
 
 TIPO_KEYWORDS = {
@@ -102,11 +109,14 @@ def _infer_from_filename(name: str) -> dict:
             variante = v
             break
 
-    skip = {"INICIAIS", "MIOLO", "LA", "LP", "ATV", "DES", "ILU", "TAP",
+    skip = {"INICIAIS", "MIOLO", "CAPA", "LA", "LP", "ATV", "DES", "ILU", "TAP",
             "PRÉ", "PRE", "1", "2", "3", "ANO"}
     for k in SERIE_KEYWORDS:
         skip.update(k.split("_"))
-    tema_parts = [p for p in parts if p not in skip and len(p) > 1]
+    tema_parts = [
+        p for p in parts
+        if p not in skip and len(p) > 1 and not re.match(r"^\d{4}$", p)
+    ]
     tema = " ".join(tema_parts).title()
 
     return {"serie": serie, "tipo": tipo, "tema": tema, "variante": variante}
