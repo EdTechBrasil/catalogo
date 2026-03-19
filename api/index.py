@@ -24,7 +24,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from excel_writer import COLUMNS, write_excel_to_bytes
-from pdf_metadata import extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
+from pdf_metadata import _dedup_chars, _ISBN_RE, _normalize_isbn, extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
 from pdf_reader import get_page_count
 from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
@@ -281,6 +281,7 @@ class ExportBody(BaseModel):
 class FileText(BaseModel):
     filename: str
     text: str
+    pages: list[str] = []
     page_count: int = 0
 
 class ProcessTextPayload(BaseModel):
@@ -300,9 +301,11 @@ async def process_text(payload: ProcessTextPayload):
             info = _infer_from_filename(item.filename)
             key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
-                groups[key] = {"iniciais_text": "", "capa_text": "", "content_text": "", "page_count": 0}
+                groups[key] = {"iniciais_text": "", "capa_text": "", "content_text": "", "page_count": 0, "all_pages": []}
 
             name_up = item.filename.upper()
+            if item.pages:
+                groups[key]["all_pages"].extend(item.pages)
             if "INICIAIS" in name_up:
                 groups[key]["iniciais_text"] = item.text
             elif "MIOLO" in name_up:
@@ -344,6 +347,24 @@ async def process_text(payload: ProcessTextPayload):
             except Exception as e:
                 meta = dict(_empty_meta)
                 warning = f"erro: {e}"
+
+            # Fallback: se ISBN vazio, varrer todas as páginas individuais
+            if not meta.get("isbn") and g.get("all_pages"):
+                import re as _re
+                for i, pg in enumerate(g["all_pages"]):
+                    pg_dd = _dedup_chars(pg)
+                    if "isbn" not in pg_dd.lower():
+                        continue
+                    pg_norm = _re.sub(r"[–—−‐‑]", "-", pg_dd)
+                    pg_cond = _re.sub(r"(?<=\d) (?=\d)", "", pg_norm)
+                    m = _ISBN_RE.search(pg_cond)
+                    if m:
+                        normalized = _normalize_isbn(m.group(1))
+                        if normalized:
+                            meta["isbn"] = normalized
+                            print(f"  [ISBN-pages] encontrado na página {i+1}")
+                            break
+
             all_empty = not any(meta.get(k) for k in ("isbn", "ano", "colecao", "autor"))
             if effective_text.strip() and all_empty and not warning:
                 warning = "LLM não encontrou metadados — verifique se o PDF contém ficha CIP em texto (não imagem)"

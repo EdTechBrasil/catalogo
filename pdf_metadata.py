@@ -68,6 +68,16 @@ def _clean_cip_text(right_lines: list[str]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Pré-processamento de texto
+# ---------------------------------------------------------------------------
+
+def _dedup_chars(text: str) -> str:
+    """Remove duplicação de caracteres consecutivos idênticos (ex: GGAARRAATTUUJJAASS → GARATUJAS).
+    Só aplica a runs de exatamente 2 — preserva triplos intencionais."""
+    return re.sub(r'(.)\1', r'\1', text)
+
+
+# ---------------------------------------------------------------------------
 # Normalização de ISBN
 # ---------------------------------------------------------------------------
 
@@ -99,9 +109,32 @@ TESS_ENDPOINT   = f"https://api.tess.im/agents/{TESS_AGENT_ID}/openai/chat/compl
 
 
 
+def _find_isbn_in_all_pages(pdf) -> str:
+    """Varre todas as páginas do PDF buscando ISBN. Retorna o primeiro encontrado."""
+    for i, page in enumerate(pdf.pages):
+        text = page.extract_text() or ""
+        text_dd = _dedup_chars(text)
+        text_norm = re.sub(r"[–—−‐‑]", "-", text_dd)
+        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", text_norm)
+        m = _ISBN_RE.search(text_condensed)
+        if m:
+            normalized = _normalize_isbn(m.group(1))
+            if normalized:
+                print(f"  [ISBN] encontrado na página {i+1}")
+                return normalized
+        bare = re.search(r"\b(97[89][\d\-\.]{10,16})\b", text_condensed)
+        if bare:
+            normalized = _normalize_isbn(bare.group(1))
+            if normalized:
+                print(f"  [ISBN-bare] encontrado na página {i+1}")
+                return normalized
+    return ""
+
+
 def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
     """Extrai metadados usando TESS IA. Retorna dict vazio em caso de falha."""
     import requests
+    cip_text = _dedup_chars(cip_text)
 
     prompt = f"""Você receberá o texto extraído de um livro educacional da Gráfica Educar.
 
@@ -174,7 +207,7 @@ Se não houver texto suficiente para uma sinopse, retorne "".
 
 def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, right_lines: list) -> None:
     """Preenche in-place APENAS os campos vazios de meta usando regex."""
-    cip_text = _clean_cip_text(right_lines)
+    cip_text = _dedup_chars(_clean_cip_text(right_lines))
 
     # Remove APENAS espaços (não newlines) entre dígitos consecutivos
     cip_clean = re.sub(r"(?<=\d) (?=\d)", "", cip_text)
@@ -331,6 +364,10 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
                 left_lines, right_lines = _group_words_into_lines(words)
                 _extract_via_regex_fill_gaps(meta, words, left_lines, right_lines)
 
+            # Fallback: varrer todas as páginas se ISBN ainda vazio
+            if not meta["isbn"]:
+                meta["isbn"] = _find_isbn_in_all_pages(pdf)
+
     except Exception as e:
         print(f"  [AVISO] Erro ao extrair metadados de {iniciais_pdf_path}: {e}")
 
@@ -339,6 +376,7 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
 
 def _extract_via_regex_text(meta: dict, text: str) -> None:
     """Preenche campos vazios via regex em texto plano (sem layout de colunas)."""
+    text = _dedup_chars(text)
 
     # ISBN
     if not meta["isbn"]:

@@ -97,7 +97,7 @@ const COL_DEFS = [
   { field: "Autor(es)",              width: 200, editable: true },
   { field: "Ilustrador(es) 1",       width: 200, editable: true },
   { field: "Ilustrador(es) 2",       width: 200, editable: true },
-  { field: "ISBN",                   width: 160, editable: true },
+  { field: "ISBN",                   width: 160, editable: true, cellStyle: params => params.value ? null : { backgroundColor: "#ffe0e0" } },
   { field: "Ano de publicação",      width: 120, editable: true },
   { field: "Número de páginas",      width: 110, editable: true },
   { field: "Sinopse",                width: 360, editable: true, wrapText: true, autoHeight: true },
@@ -199,7 +199,7 @@ async function extractPdfText(arrayBuffer) {
       .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
     pageTexts.push(lines.join("\n"));
   }
-  return { text: pageTexts.join("\n"), pageCount: pdf.numPages };
+  return { text: pageTexts.join("\n"), pages: pageTexts, pageCount: pdf.numPages };
 }
 
 async function extractZipTexts(file) {
@@ -214,9 +214,9 @@ async function extractZipTexts(file) {
   for (const { path, entry } of pdfEntries) {
     try {
       const ab = await entry.async("arraybuffer");
-      const { text, pageCount } = await extractPdfText(ab);
+      const { text, pages, pageCount } = await extractPdfText(ab);
       const filename = path.split("/").pop();
-      results.push({ filename, text, page_count: pageCount });
+      results.push({ filename, text, pages, page_count: pageCount });
     } catch (err) {
       console.warn(`Erro ao processar ${path}:`, err);
     }
@@ -248,8 +248,8 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
         fileTexts.push(...zipTexts);
       } else if (nameLow.endsWith(".pdf")) {
         showSpinner(`Extraindo texto: ${file.name}`);
-        const { text, pageCount } = await extractPdfText(await file.arrayBuffer());
-        fileTexts.push({ filename: file.name, text, page_count: pageCount });
+        const { text, pages, pageCount } = await extractPdfText(await file.arrayBuffer());
+        fileTexts.push({ filename: file.name, text, pages, page_count: pageCount });
       }
     }
 
