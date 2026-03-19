@@ -306,8 +306,11 @@ async def process_text(payload: ProcessTextPayload):
             if "INICIAIS" in name_up:
                 groups[key]["iniciais_text"] = item.text
             elif "MIOLO" in name_up:
-                groups[key]["content_text"] = item.text[:2000]
+                groups[key]["content_text"] = item.text[:8000]
                 groups[key]["page_count"] = item.page_count
+            elif "CAPA" in name_up:
+                if not groups[key]["page_count"]:
+                    groups[key]["page_count"] = item.page_count
             else:
                 if not groups[key]["iniciais_text"]:
                     groups[key]["iniciais_text"] = item.text
