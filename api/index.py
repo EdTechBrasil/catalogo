@@ -2,6 +2,7 @@
 FastAPI backend — Catálogo Gráfica Educar
 Run: uvicorn api.index:app --reload --port 8000
 """
+import asyncio
 import io
 import os
 import re
@@ -23,7 +24,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from excel_writer import COLUMNS, write_excel_to_bytes
-from pdf_metadata import extract_metadata, extract_metadata_from_text
+from pdf_metadata import extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
 from pdf_reader import get_page_count
 from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
@@ -301,12 +302,22 @@ async def process_text(payload: ProcessTextPayload):
                 if not groups[key]["page_count"]:
                     groups[key]["page_count"] = item.page_count
 
-        records = []
-        for (serie, tipo, tema, _variante), g in groups.items():
-            meta = extract_metadata_from_text(g["iniciais_text"], g["content_text"])
+        _empty_meta = {
+            "isbn": "", "ano": "", "colecao": "", "autor": "",
+            "ilustradores_1": "", "ilustradores_2": "", "sinopse": "",
+        }
+
+        async def _process_group(serie, tipo, tema, g):
+            try:
+                meta = await asyncio.wait_for(
+                    extract_metadata_from_text_async(g["iniciais_text"], g["content_text"]),
+                    timeout=75.0,
+                )
+            except asyncio.TimeoutError:
+                meta = dict(_empty_meta)
             titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
-            records.append({
-                "Item":                        len(records) + 1,
+            return {
+                "Item":                        0,
                 "Opção":                       1,
                 "Coleção":                     meta.get("colecao", ""),
                 "Faixa etária / nível":        serie,
@@ -320,7 +331,13 @@ async def process_text(payload: ProcessTextPayload):
                 "Sinopse":                     meta.get("sinopse", ""),
                 "Preço unitário":              "",
                 "Material de apoio pedagógico": "",
-            })
+            }
+
+        tasks = [
+            _process_group(serie, tipo, tema, g)
+            for (serie, tipo, tema, _variante), g in groups.items()
+        ]
+        records = list(await asyncio.gather(*tasks))
 
         return {"records": _renumber(records)}
 

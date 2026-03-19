@@ -68,6 +68,27 @@ def _clean_cip_text(right_lines: list[str]) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Normalização de ISBN
+# ---------------------------------------------------------------------------
+
+def _normalize_isbn(raw: str) -> str:
+    """Normaliza qualquer string para ISBN-13 (XXX-XX-XXXXX-XX-X) ou ISBN-10 (X-XX-XXXXXX-X).
+    Retorna '' se a quantidade de dígitos não for 13 nem 10."""
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 13:
+        return f"{digits[:3]}-{digits[3:5]}-{digits[5:10]}-{digits[10:12]}-{digits[12]}"
+    if len(digits) == 10:
+        return f"{digits[0]}-{digits[1:3]}-{digits[3:9]}-{digits[9]}"
+    return ""
+
+
+_ISBN_RE = re.compile(
+    r"ISBN(?:[- ]?1[03])?[:\s]*([0-9][0-9 \-\.–]{8,}[0-9X])",
+    re.IGNORECASE,
+)
+
+
+# ---------------------------------------------------------------------------
 # LLM via TESS IA (OpenAI-compatible endpoint)
 # ---------------------------------------------------------------------------
 
@@ -86,10 +107,11 @@ SYSTEM_PROMPT = """Você é um especialista sênior em catalogação bibliográf
 
 1. **Saída**: Responda SEMPRE e SOMENTE com JSON válido. Zero texto fora do JSON. Zero markdown. Zero bloco de código.
 2. **Integridade**: NUNCA invente, suponha ou infira campos não encontrados no texto. Campo ausente = "".
-3. **Fidelidade**: Reproduza valores exatamente como aparecem no documento — hífens do ISBN, acentos nos nomes, ano com 4 dígitos.
-4. **Autor**: Extraia o(s) nome(s) do autor, autora ou organizador(es) da obra — geralmente indicado nas seções "Texto", "Autoria" ou "Organização" da ficha técnica. Não confunda com ilustradores, revisores ou diagramadores.
-5. **Sinopse**: NUNCA copie as entradas de assunto da ficha CIP (ex: "1. Matemática. 2. Educação básica."). A sinopse é sempre texto editorial original em português, texto corrido.
-6. **Idioma**: Português do Brasil.
+3. **Fidelidade**: Reproduza valores exatamente como aparecem — acentos nos nomes, ano com 4 dígitos.
+4. **ISBN**: Retorne SEMPRE o ISBN-13 (13 dígitos) no formato canônico com hífens: "XXX-XX-XXXXX-XX-X". Se houver ISBN-10 e ISBN-13, prefira o ISBN-13. Normalize separadores variados (espaços, pontos, en-dash) para hífen "-". Nunca invente dígitos.
+5. **Autor**: Extraia o(s) nome(s) do autor, autora ou organizador(es) da obra — geralmente indicado nas seções "Texto", "Autoria" ou "Organização" da ficha técnica. Não confunda com ilustradores, revisores ou diagramadores.
+6. **Sinopse**: NUNCA copie as entradas de assunto da ficha CIP (ex: "1. Matemática. 2. Educação básica."). A sinopse é sempre texto editorial original em português, texto corrido.
+7. **Idioma**: Português do Brasil.
 
 ## Schema de saída obrigatório
 
@@ -170,19 +192,23 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
 
     # ISBN
     if not meta["isbn"]:
-        isbn_match = re.search(
-            r"ISBN[:\s]+([\d][\d\-]{11,}[\d])(?:\s|\(|$)", cip_clean, re.IGNORECASE
-        )
-        if isbn_match:
-            meta["isbn"] = isbn_match.group(1).strip()
-        else:
-            cip_nospace = re.sub(r"\s+", "", cip_text)
-            isbn_match2 = re.search(r"ISBN:?([\d][\d\-]{11,}[\d])", cip_nospace, re.IGNORECASE)
-            if isbn_match2:
-                raw = isbn_match2.group(1)
-                digits = re.sub(r"\D", "", raw)[:13]
-                if len(digits) == 13:
-                    meta["isbn"] = f"{digits[:3]}-{digits[3:5]}-{digits[5:10]}-{digits[10:12]}-{digits[12]}"
+        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", cip_text)
+        for candidate in (text_condensed, re.sub(r"\s+", "", cip_text)):
+            matches = _ISBN_RE.findall(candidate)
+            for raw in matches:
+                normalized = _normalize_isbn(raw)
+                if normalized and len(re.sub(r"\D", "", raw)) == 13:
+                    meta["isbn"] = normalized
+                    break
+            if meta["isbn"]:
+                break
+            for raw in matches:
+                normalized = _normalize_isbn(raw)
+                if normalized:
+                    meta["isbn"] = normalized
+                    break
+            if meta["isbn"]:
+                break
 
     # Ano de publicação
     if not meta["ano"]:
@@ -285,7 +311,7 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
             print(f"  [LLM] {'OK' if llm_result else 'FALHOU'} — {iniciais_pdf_path}")
 
             if llm_result:
-                meta["isbn"]           = llm_result.get("isbn", "")
+                meta["isbn"]           = _normalize_isbn(llm_result.get("isbn", ""))
                 meta["ano"]            = llm_result.get("ano", "")
                 meta["colecao"]        = llm_result.get("colecao", "")
                 meta["autor"]          = llm_result.get("autor", "")
@@ -309,20 +335,23 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
 
     # ISBN
     if not meta["isbn"]:
-        cip_nospace = re.sub(r"(?<=\d) (?=\d)", "", text)
-        isbn_match = re.search(
-            r"ISBN[:\s]+([\d][\d\-]{11,}[\d])(?:\s|\(|$)", cip_nospace, re.IGNORECASE
-        )
-        if isbn_match:
-            meta["isbn"] = isbn_match.group(1).strip()
-        else:
-            nospace = re.sub(r"\s+", "", text)
-            isbn_match2 = re.search(r"ISBN:?([\d][\d\-]{11,}[\d])", nospace, re.IGNORECASE)
-            if isbn_match2:
-                raw = isbn_match2.group(1)
-                digits = re.sub(r"\D", "", raw)[:13]
-                if len(digits) == 13:
-                    meta["isbn"] = f"{digits[:3]}-{digits[3:5]}-{digits[5:10]}-{digits[10:12]}-{digits[12]}"
+        text_condensed = re.sub(r"(?<=\d) (?=\d)", "", text)
+        for candidate in (text_condensed, re.sub(r"\s+", "", text)):
+            matches = _ISBN_RE.findall(candidate)
+            for raw in matches:
+                normalized = _normalize_isbn(raw)
+                if normalized and len(re.sub(r"\D", "", raw)) == 13:
+                    meta["isbn"] = normalized
+                    break
+            if meta["isbn"]:
+                break
+            for raw in matches:
+                normalized = _normalize_isbn(raw)
+                if normalized:
+                    meta["isbn"] = normalized
+                    break
+            if meta["isbn"]:
+                break
 
     # Ano
     if not meta["ano"]:
@@ -398,7 +427,7 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
     print(f"  [LLM] {'OK' if llm_result else 'FALHOU'} — (text input)")
 
     if llm_result:
-        meta["isbn"]           = llm_result.get("isbn", "")
+        meta["isbn"]           = _normalize_isbn(llm_result.get("isbn", ""))
         meta["ano"]            = llm_result.get("ano", "")
         meta["colecao"]        = llm_result.get("colecao", "")
         meta["autor"]          = llm_result.get("autor", "")
@@ -410,3 +439,21 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
         _extract_via_regex_text(meta, cip_text)
 
     return meta
+
+
+# ---------------------------------------------------------------------------
+# Wrapper async para paralelismo no servidor
+# ---------------------------------------------------------------------------
+
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+_LLM_EXECUTOR = ThreadPoolExecutor(max_workers=5)
+
+
+async def extract_metadata_from_text_async(cip_text: str, content_text: str = "") -> dict:
+    """Versão async — executa LLM em thread pool para permitir paralelismo."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(
+        _LLM_EXECUTOR, extract_metadata_from_text, cip_text, content_text
+    )
