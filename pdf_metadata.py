@@ -192,6 +192,13 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
                     break
             if meta["isbn"]:
                 break
+        # Fallback: busca sequência de 13 dígitos começando com 978/979 (sem prefixo "ISBN")
+        if not meta["isbn"]:
+            bare = re.search(r"\b(97[89][\d\s\-\.–]{10,17})\b", text_condensed)
+            if bare:
+                normalized = _normalize_isbn(bare.group(1))
+                if normalized:
+                    meta["isbn"] = normalized
 
     # Ano de publicação
     if not meta["ano"]:
@@ -335,6 +342,13 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
                     break
             if meta["isbn"]:
                 break
+        # Fallback: busca sequência de 13 dígitos começando com 978/979 (sem prefixo "ISBN")
+        if not meta["isbn"]:
+            bare = re.search(r"\b(97[89][\d\s\-\.–]{10,17})\b", text_condensed)
+            if bare:
+                normalized = _normalize_isbn(bare.group(1))
+                if normalized:
+                    meta["isbn"] = normalized
 
     # Ano
     if not meta["ano"]:
