@@ -272,6 +272,11 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
     }
     const data = await res.json();
     State.records = renumber(dedup([...State.records, ...data.records]));
+    data.records.forEach(rec => {
+      if (rec._debug_isbn) {
+        console.warn(`[ISBN-DBG] ${rec["Título"]}:`, rec._debug_isbn);
+      }
+    });
     saveState();
     refreshGrid();
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");

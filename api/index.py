@@ -366,6 +366,13 @@ async def process_text(payload: ProcessTextPayload):
             }
             if warning:
                 record["_warning"] = warning
+            # Diagnóstico ISBN
+            isbn_pos = effective_text.lower().find("isbn")
+            if isbn_pos >= 0:
+                debug_isbn = effective_text[max(0, isbn_pos-10):isbn_pos+80]
+            else:
+                debug_isbn = f"[NÃO ENCONTRADO] primeiros 200 chars: {effective_text[:200]}"
+            record["_debug_isbn"] = debug_isbn
             return record
 
         tasks = [

@@ -448,6 +448,15 @@ def extract_metadata_from_text(cip_text: str, content_text: str = "") -> dict:
         print("  [LLM] Texto vazio — pulando extração")
         return meta
 
+    # Diagnóstico ISBN
+    isbn_occurrences = [m.start() for m in re.finditer(r"isbn", cip_text, re.IGNORECASE)]
+    if isbn_occurrences:
+        ctx = cip_text[max(0, isbn_occurrences[0]-10):isbn_occurrences[0]+60]
+        print(f"  [ISBN-DBG] keyword encontrada em {isbn_occurrences} | contexto: {ctx!r}")
+    else:
+        print(f"  [ISBN-DBG] keyword 'ISBN' NÃO encontrada no texto ({len(cip_text)} chars)")
+        print(f"  [ISBN-DBG] primeiros 300 chars: {cip_text[:300]!r}")
+
     llm_result = _extract_via_llm(cip_text, content_text)
     print(f"  [LLM] {'OK' if llm_result else 'FALHOU'} — (text input)")
 
