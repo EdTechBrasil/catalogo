@@ -309,9 +309,11 @@ async def process_text(payload: ProcessTextPayload):
 
         async def _process_group(serie, tipo, tema, g):
             warning = None
+            # Se não há INICIAIS, usa o conteúdo do MIOLO como fonte de extração
+            effective_text = g["iniciais_text"] or g["content_text"]
             try:
                 meta = await asyncio.wait_for(
-                    extract_metadata_from_text_async(g["iniciais_text"], g["content_text"]),
+                    extract_metadata_from_text_async(effective_text, g["content_text"]),
                     timeout=75.0,
                 )
             except asyncio.TimeoutError:
@@ -355,7 +357,7 @@ async def process_text(payload: ProcessTextPayload):
                 warnings.append({"titulo": r["Título"], "motivo": w})
 
         for (serie, tipo, tema, _variante), g in groups.items():
-            if not g["iniciais_text"].strip():
+            if not g["iniciais_text"].strip() and not g["content_text"].strip():
                 titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
                 warnings.append({"titulo": titulo, "motivo": "texto vazio (PDF pode ser escaneado)"})
 
