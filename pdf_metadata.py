@@ -109,9 +109,11 @@ def _extract_via_llm(cip_text: str, content_text: str = "") -> dict:
 Procure em QUALQUER parte do texto pelos campos abaixo.
 NÃO invente — retorne "" se genuinamente não encontrar.
 
-- isbn: ISBN-13 com 13 dígitos no formato canônico "XXX-XX-XXXXX-XX-X".
+- isbn: sequência ISBN com 13 dígitos. A hifenização no documento PODE ser não-padrão
+  (ex: "978-6585888-02-8" em vez de "978-65-85888-02-8"). Ignore o agrupamento dos hífens —
+  extraia qualquer sequência de 13 dígitos após "ISBN" e retorne no formato "XXX-XX-XXXXX-XX-X".
   Procure no bloco "Dados Internacionais de Catalogação" ou após "ISBN".
-  Normalize separadores variados (espaço, ponto, en-dash) para hífen "-".
+  Normalize separadores variados (espaço, ponto, en-dash, traços Unicode) para hífen "-".
   Se houver ISBN-10 e ISBN-13, prefira o ISBN-13.
   IMPORTANTE: retorne SOMENTE os dígitos formatados com hífens, sem texto adicional.
 - ano: ano de publicação com 4 dígitos (ex: "2023")
@@ -179,7 +181,9 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
 
     # ISBN
     if not meta["isbn"]:
-        cip_isbn = re.sub(r"([0-9\-\.–])\n([0-9\-\.–])", r"\1\2", cip_text)
+        # Normalizar todos os tipos de traço para hífen ASCII
+        cip_norm = re.sub(r"[–—−‐‑]", "-", cip_text)
+        cip_isbn = re.sub(r"([0-9\-\.])(\n)([0-9\-\.])", r"\1\3", cip_norm)
         text_condensed = re.sub(r"(?<=\d) (?=\d)", "", cip_isbn)
         for candidate in (text_condensed, re.sub(r"\s+", "", cip_isbn)):
             matches = _ISBN_RE.findall(candidate)
@@ -197,13 +201,20 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
                     break
             if meta["isbn"]:
                 break
-        # Fallback: busca sequência de 13 dígitos começando com 978/979 (sem prefixo "ISBN")
+        # Fallback bare: busca sequência 978/979 sem prefixo "ISBN" (sem \s para não capturar dígitos adjacentes)
         if not meta["isbn"]:
-            bare = re.search(r"\b(97[89][\d\s\-\.–]{10,17})\b", text_condensed)
+            bare = re.search(r"\b(97[89][\d\-\.]{10,16})\b", text_condensed)
             if bare:
                 normalized = _normalize_isbn(bare.group(1))
                 if normalized:
                     meta["isbn"] = normalized
+        # Fallback agressivo: pega 40 chars após "ISBN", strip não-dígitos, valida 13 dígitos
+        if not meta["isbn"]:
+            for m in re.finditer(r"ISBN\b", text_condensed, re.IGNORECASE):
+                chunk = re.sub(r"\D", "", text_condensed[m.end():m.end()+40])
+                if re.match(r"97[89]", chunk) and len(chunk) == 13:
+                    meta["isbn"] = _normalize_isbn(chunk)
+                    break
 
     # Ano de publicação
 
@@ -331,7 +342,9 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
 
     # ISBN
     if not meta["isbn"]:
-        text_isbn = re.sub(r"([0-9\-\.–])\n([0-9\-\.–])", r"\1\2", text)
+        # Normalizar todos os tipos de traço para hífen ASCII
+        text_norm = re.sub(r"[–—−‐‑]", "-", text)
+        text_isbn = re.sub(r"([0-9\-\.])(\n)([0-9\-\.])", r"\1\3", text_norm)
         text_condensed = re.sub(r"(?<=\d) (?=\d)", "", text_isbn)
         for candidate in (text_condensed, re.sub(r"\s+", "", text_isbn)):
             matches = _ISBN_RE.findall(candidate)
@@ -349,13 +362,20 @@ def _extract_via_regex_text(meta: dict, text: str) -> None:
                     break
             if meta["isbn"]:
                 break
-        # Fallback: busca sequência de 13 dígitos começando com 978/979 (sem prefixo "ISBN")
+        # Fallback bare: busca sequência 978/979 sem prefixo "ISBN" (sem \s para não capturar dígitos adjacentes)
         if not meta["isbn"]:
-            bare = re.search(r"\b(97[89][\d\s\-\.–]{10,17})\b", text_condensed)
+            bare = re.search(r"\b(97[89][\d\-\.]{10,16})\b", text_condensed)
             if bare:
                 normalized = _normalize_isbn(bare.group(1))
                 if normalized:
                     meta["isbn"] = normalized
+        # Fallback agressivo: pega 40 chars após "ISBN", strip não-dígitos, valida 13 dígitos
+        if not meta["isbn"]:
+            for m in re.finditer(r"ISBN\b", text_condensed, re.IGNORECASE):
+                chunk = re.sub(r"\D", "", text_condensed[m.end():m.end()+40])
+                if re.match(r"97[89]", chunk) and len(chunk) == 13:
+                    meta["isbn"] = _normalize_isbn(chunk)
+                    break
 
     # Ano
     if not meta["ano"]:
