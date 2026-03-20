@@ -186,7 +186,7 @@ let _tessWorker = null;
 
 async function getTessWorker() {
   if (!_tessWorker) {
-    _tessWorker = await Tesseract.createWorker("por+eng", 1, {
+    _tessWorker = await Tesseract.createWorker("eng", 1, {
       logger: () => {}, // silenciar logs internos
     });
   }
@@ -196,7 +196,7 @@ async function getTessWorker() {
 async function ocrPageCanvas(page) {
   /** Renderiza a página no canvas e executa OCR. Retorna texto ou ''. */
   try {
-    const viewport = page.getViewport({ scale: 1.5 });
+    const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
@@ -235,8 +235,8 @@ async function extractPdfText(arrayBuffer) {
     if (isCipPage && !hasIsbn && typeof Tesseract !== "undefined") {
       showSpinner(`OCR página ${i} de ${pdf.numPages}…`);
       const ocrText = await ocrPageCanvas(page);
-      if (ocrText && /97[89]/.test(ocrText)) {
-        console.log(`[OCR] Página ${i} — ISBN encontrado via OCR`);
+      console.log(`[OCR] Página ${i} (${ocrText.length} chars): ${ocrText.slice(0, 150)}`);
+      if (ocrText && ocrText.length > 100) {
         pageTexts.push(pageText + "\n[OCR]\n" + ocrText);
       } else {
         pageTexts.push(pageText);
