@@ -229,14 +229,15 @@ async function extractPdfText(arrayBuffer) {
       .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
     const pageText = lines.join("\n");
 
-    // Para página 2 (ficha CIP): se o texto não contém ISBN, tentar OCR
+    // Para páginas 1-3: se não contém ISBN, tentar OCR (ficha CIP pode variar de página)
     const hasIsbn = /\bISBN\b/i.test(pageText) && /97[89]/.test(pageText);
-    const isCipPage = i === 2 || (/\b(cip|catalogação)\b/i.test(pageText) && pageText.length < 1200);
+    const isCipPage = i <= 3;
     if (isCipPage && !hasIsbn && typeof Tesseract !== "undefined") {
+      console.log(`[OCR-CHECK] Página ${i}: sem ISBN no texto (${pageText.length} chars), tentando OCR…`);
       showSpinner(`OCR página ${i} de ${pdf.numPages}…`);
       const ocrText = await ocrPageCanvas(page);
       console.log(`[OCR] Página ${i} (${ocrText.length} chars): ${ocrText.slice(0, 150)}`);
-      if (ocrText && ocrText.length > 100) {
+      if (ocrText && ocrText.trim().length > 10) {
         pageTexts.push(pageText + "\n[OCR]\n" + ocrText);
       } else {
         pageTexts.push(pageText);
