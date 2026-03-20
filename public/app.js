@@ -194,7 +194,7 @@ async function getTessWorker() {
 }
 
 async function ocrPageCanvas(page) {
-  /** Renderiza a página no canvas e executa OCR. Retorna texto ou ''. */
+  /** Renderiza a página no canvas e executa OCR. Retorna { text, canvas }. */
   try {
     const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement("canvas");
@@ -203,10 +203,10 @@ async function ocrPageCanvas(page) {
     await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
     const worker = await getTessWorker();
     const { data: { text } } = await worker.recognize(canvas);
-    return text || "";
+    return { text: text || "", canvas };
   } catch (err) {
     console.warn("[OCR] Erro no OCR:", err);
-    return "";
+    return { text: "", canvas: null };
   }
 }
 
@@ -214,6 +214,7 @@ async function extractPdfText(arrayBuffer) {
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdf = await loadingTask.promise;
   const pageTexts = [];
+  const pageImages = {};
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
@@ -235,18 +236,24 @@ async function extractPdfText(arrayBuffer) {
     if (isCipPage && !hasIsbn && typeof Tesseract !== "undefined") {
       console.log(`[OCR-CHECK] Página ${i}: sem ISBN no texto (${pageText.length} chars), tentando OCR…`);
       showSpinner(`OCR página ${i} de ${pdf.numPages}…`);
-      const ocrText = await ocrPageCanvas(page);
+      const { text: ocrText, canvas } = await ocrPageCanvas(page);
       console.log(`[OCR] Página ${i} (${ocrText.length} chars): ${ocrText.slice(0, 150)}`);
       if (ocrText && ocrText.trim().length > 10) {
         pageTexts.push(pageText + "\n[OCR]\n" + ocrText);
       } else {
+        // Tesseract não leu — capturar imagem para fallback via Claude Vision
+        if (canvas) {
+          const imgB64 = canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+          pageImages[i] = imgB64;
+          console.log(`[OCR] Página ${i}: OCR insuficiente, imagem capturada para Vision LLM (${imgB64.length} chars b64)`);
+        }
         pageTexts.push(pageText);
       }
     } else {
       pageTexts.push(pageText);
     }
   }
-  return { text: pageTexts.join("\n"), pages: pageTexts, pageCount: pdf.numPages };
+  return { text: pageTexts.join("\n"), pages: pageTexts, pageCount: pdf.numPages, pageImages };
 }
 
 async function extractZipTexts(file) {
@@ -261,9 +268,9 @@ async function extractZipTexts(file) {
   for (const { path, entry } of pdfEntries) {
     try {
       const ab = await entry.async("arraybuffer");
-      const { text, pages, pageCount } = await extractPdfText(ab);
+      const { text, pages, pageCount, pageImages } = await extractPdfText(ab);
       const filename = path.split("/").pop();
-      results.push({ filename, text, pages, page_count: pageCount });
+      results.push({ filename, text, pages, page_count: pageCount, page_images: pageImages });
     } catch (err) {
       console.warn(`Erro ao processar ${path}:`, err);
     }
@@ -295,8 +302,8 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
         fileTexts.push(...zipTexts);
       } else if (nameLow.endsWith(".pdf")) {
         showSpinner(`Extraindo texto: ${file.name}`);
-        const { text, pages, pageCount } = await extractPdfText(await file.arrayBuffer());
-        fileTexts.push({ filename: file.name, text, pages, page_count: pageCount });
+        const { text, pages, pageCount, pageImages } = await extractPdfText(await file.arrayBuffer());
+        fileTexts.push({ filename: file.name, text, pages, page_count: pageCount, page_images: pageImages });
       }
     }
 

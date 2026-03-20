@@ -24,7 +24,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from excel_writer import COLUMNS, write_excel_to_bytes
-from pdf_metadata import _dedup_chars, _ISBN_RE, _normalize_isbn, _extract_isbn_via_ocr_image, extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
+from pdf_metadata import _dedup_chars, _ISBN_RE, _normalize_isbn, _extract_isbn_via_vision_llm, extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
 from pdf_reader import get_page_count
 from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
@@ -375,11 +375,11 @@ async def process_text(payload: ProcessTextPayload):
                 loop = asyncio.get_event_loop()
                 for page_num, img_b64 in g["page_images"].items():
                     print(f"  [OCR] tentando OCR na página {page_num} ({len(img_b64)} chars b64)")
-                    isbn = await loop.run_in_executor(None, _extract_isbn_via_ocr_image, img_b64)
-                    print(f"  [OCR] resultado página {page_num}: {isbn!r}")
+                    isbn = await loop.run_in_executor(None, _extract_isbn_via_vision_llm, img_b64)
+                    print(f"  [ISBN-ICR-vision] resultado página {page_num}: {isbn!r}")
                     if isbn:
                         meta["isbn"] = isbn
-                        print(f"  [ISBN-OCR-browser] encontrado na página {page_num}")
+                        print(f"  [ISBN-ICR-vision] encontrado na página {page_num}")
                         break
 
             all_empty = not any(meta.get(k) for k in ("isbn", "ano", "colecao", "autor"))

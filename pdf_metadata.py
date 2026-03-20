@@ -394,6 +394,42 @@ def _extract_isbn_via_ocr_image(image_b64: str) -> str:
     return ""
 
 
+def _extract_isbn_via_vision_llm(image_b64: str) -> str:
+    """Usa Claude Vision (TESS API) para extrair ISBN de imagem de página."""
+    import requests
+    payload = {
+        "model": TESS_MODEL,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                },
+                {
+                    "type": "text",
+                    "text": "Esta é a ficha catalográfica (CIP) de um livro. Extraia APENAS o ISBN (começa com 978 ou 979). Responda somente com o ISBN no formato 978-XX-XXXXX-XX-X, sem mais nada. Se não encontrar, responda vazio."
+                }
+            ]
+        }],
+        "max_tokens": 50,
+        "stream": False,
+    }
+    try:
+        resp = requests.post(
+            TESS_ENDPOINT,
+            headers={"Authorization": f"Bearer {TESS_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        text = resp.json()["choices"][0]["message"]["content"].strip()
+        return _isbn_from_ocr_text(text) or (_normalize_isbn(text) if text else "")
+    except Exception as e:
+        print(f"  [ISBN-ICR-vision ERRO] {e}")
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # Função pública
 # ---------------------------------------------------------------------------
