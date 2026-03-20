@@ -180,10 +180,21 @@ function initTabs() {
 
 // ── PDF client-side extraction ────────────────────────────────────────────────
 
+async function renderPageToJpeg(page, scale = 1.5) {
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  return canvas.toDataURL("image/jpeg", 0.75).split(",")[1]; // base64 sem header
+}
+
 async function extractPdfText(arrayBuffer) {
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdf = await loadingTask.promise;
   const pageTexts = [];
+  // page_images: base64 JPEG para páginas com pouco texto (provável CIP em imagem)
+  const pageImages = {};
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
@@ -197,9 +208,19 @@ async function extractPdfText(arrayBuffer) {
     const lines = Object.keys(lineMap)
       .sort((a, b) => Number(b) - Number(a))
       .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
-    pageTexts.push(lines.join("\n"));
+    const pageText = lines.join("\n");
+    pageTexts.push(pageText);
+    // Se página tem "CIP" ou "ISBN" no texto MAS texto é curto (ISBN em imagem),
+    // OU se é a página 2 com menos de 500 chars de texto, renderizar como imagem
+    const hasCipKeyword = /\b(cip|isbn|catalo|catalogação)\b/i.test(pageText);
+    const isPage2 = i === 2;
+    if ((hasCipKeyword && pageText.length < 800) || (isPage2 && pageText.length < 500)) {
+      try {
+        pageImages[i] = await renderPageToJpeg(page);
+      } catch (_) { /* silenciar erros de canvas */ }
+    }
   }
-  return { text: pageTexts.join("\n"), pages: pageTexts, pageCount: pdf.numPages };
+  return { text: pageTexts.join("\n"), pages: pageTexts, pageImages, pageCount: pdf.numPages };
 }
 
 async function extractZipTexts(file) {
@@ -214,9 +235,9 @@ async function extractZipTexts(file) {
   for (const { path, entry } of pdfEntries) {
     try {
       const ab = await entry.async("arraybuffer");
-      const { text, pages, pageCount } = await extractPdfText(ab);
+      const { text, pages, pageImages, pageCount } = await extractPdfText(ab);
       const filename = path.split("/").pop();
-      results.push({ filename, text, pages, page_count: pageCount });
+      results.push({ filename, text, pages, page_images: pageImages, page_count: pageCount });
     } catch (err) {
       console.warn(`Erro ao processar ${path}:`, err);
     }
@@ -248,8 +269,8 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
         fileTexts.push(...zipTexts);
       } else if (nameLow.endsWith(".pdf")) {
         showSpinner(`Extraindo texto: ${file.name}`);
-        const { text, pages, pageCount } = await extractPdfText(await file.arrayBuffer());
-        fileTexts.push({ filename: file.name, text, pages, page_count: pageCount });
+        const { text, pages, pageImages, pageCount } = await extractPdfText(await file.arrayBuffer());
+        fileTexts.push({ filename: file.name, text, pages, page_images: pageImages, page_count: pageCount });
       }
     }
 

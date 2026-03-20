@@ -24,7 +24,7 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT))
 
 from excel_writer import COLUMNS, write_excel_to_bytes
-from pdf_metadata import _dedup_chars, _ISBN_RE, _normalize_isbn, extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
+from pdf_metadata import _dedup_chars, _ISBN_RE, _normalize_isbn, _extract_isbn_via_ocr_image, extract_metadata, extract_metadata_from_text, extract_metadata_from_text_async
 from pdf_reader import get_page_count
 from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
@@ -282,6 +282,7 @@ class FileText(BaseModel):
     filename: str
     text: str
     pages: list[str] = []
+    page_images: dict[int, str] = {}  # {page_number: base64_jpeg}
     page_count: int = 0
 
 class ProcessTextPayload(BaseModel):
@@ -301,11 +302,13 @@ async def process_text(payload: ProcessTextPayload):
             info = _infer_from_filename(item.filename)
             key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
-                groups[key] = {"iniciais_text": "", "capa_text": "", "content_text": "", "page_count": 0, "all_pages": []}
+                groups[key] = {"iniciais_text": "", "capa_text": "", "content_text": "", "page_count": 0, "all_pages": [], "page_images": {}}
 
             name_up = item.filename.upper()
             if item.pages:
                 groups[key]["all_pages"].extend(item.pages)
+            if item.page_images:
+                groups[key]["page_images"].update(item.page_images)
             if "INICIAIS" in name_up:
                 groups[key]["iniciais_text"] = item.text
             elif "MIOLO" in name_up:
@@ -364,6 +367,16 @@ async def process_text(payload: ProcessTextPayload):
                             meta["isbn"] = normalized
                             print(f"  [ISBN-pages] encontrado na página {i+1}")
                             break
+
+            # Último fallback: OCR sobre imagens de página enviadas pelo browser
+            if not meta.get("isbn") and g.get("page_images"):
+                loop = asyncio.get_event_loop()
+                for page_num, img_b64 in g["page_images"].items():
+                    isbn = await loop.run_in_executor(None, _extract_isbn_via_ocr_image, img_b64)
+                    if isbn:
+                        meta["isbn"] = isbn
+                        print(f"  [ISBN-OCR-browser] encontrado na página {page_num}")
+                        break
 
             all_empty = not any(meta.get(k) for k in ("isbn", "ano", "colecao", "autor"))
             if effective_text.strip() and all_empty and not warning:

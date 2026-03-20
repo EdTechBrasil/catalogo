@@ -299,6 +299,102 @@ def _extract_via_regex_fill_gaps(meta: dict, words: list, left_lines: list, righ
 
 
 # ---------------------------------------------------------------------------
+# OCR fallback — macOS Vision (nativo) com pytesseract como alternativa
+# ---------------------------------------------------------------------------
+
+def _ocr_text_from_pil(pil_img) -> str:
+    """Roda OCR em uma imagem PIL. Tenta macOS Vision; fallback: pytesseract."""
+    import tempfile, os
+    from io import BytesIO as _BytesIO
+
+    # --- macOS Vision Framework (sem dependências de sistema) ---
+    try:
+        import Vision
+        from Foundation import NSURL
+
+        buf = _BytesIO()
+        pil_img.convert("RGB").save(buf, format="PNG")
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            f.write(buf.getvalue())
+            tmp = f.name
+        try:
+            url = NSURL.fileURLWithPath_(tmp)
+            handler = Vision.VNImageRequestHandler.alloc().initWithURL_options_(url, None)
+            req = Vision.VNRecognizeTextRequest.alloc().init()
+            req.setRecognitionLevel_(Vision.VNRequestTextRecognitionLevelAccurate)
+            req.setUsesLanguageCorrection_(True)
+            handler.performRequests_error_([req], None)
+            return "\n".join(
+                obs.topCandidates_(1)[0].string() for obs in (req.results() or [])
+            )
+        finally:
+            os.unlink(tmp)
+    except Exception:
+        pass
+
+    # --- pytesseract (requer tesseract instalado no sistema) ---
+    try:
+        import pytesseract
+        return pytesseract.image_to_string(pil_img, lang="por+eng", config="--psm 6")
+    except Exception:
+        pass
+
+    return ""
+
+
+def _isbn_from_ocr_text(text: str) -> str:
+    """Extrai ISBN de texto OCR. Retorna string normalizada ou ''.
+    NÃO aplica _dedup_chars — o texto OCR já é correto (ao contrário de texto de PDF com fonte quebrada)."""
+    if "isbn" not in text.lower():
+        return ""
+    text_norm = re.sub(r"[–—−‐‑]", "-", text)
+    text_cond = re.sub(r"(?<=\d) (?=\d)", "", text_norm)
+    m = _ISBN_RE.search(text_cond)
+    if m:
+        normalized = _normalize_isbn(m.group(1))
+        if normalized:
+            return normalized
+    bare = re.search(r"\b(97[89][\d\-\.]{10,16})\b", text_cond)
+    if bare:
+        return _normalize_isbn(bare.group(1))
+    return ""
+
+
+def _extract_isbn_via_ocr(pdf) -> str:
+    """Usa OCR nas primeiras 5 páginas do PDF para extrair ISBN embutido em imagem."""
+    try:
+        for i, page in enumerate(pdf.pages[:5]):
+            try:
+                pil_img = page.to_image(resolution=150).original
+            except Exception:
+                continue
+            text = _ocr_text_from_pil(pil_img)
+            isbn = _isbn_from_ocr_text(text)
+            if isbn:
+                print(f"  [ISBN-OCR] encontrado na página {i+1}")
+                return isbn
+    except Exception as e:
+        print(f"  [OCR ERRO] {e}")
+    return ""
+
+
+def _extract_isbn_via_ocr_image(image_b64: str) -> str:
+    """OCR sobre imagem base64 (JPEG/PNG) enviada pelo browser. Retorna ISBN ou ''."""
+    try:
+        import base64
+        from PIL import Image as PILImage
+        from io import BytesIO as _BytesIO
+
+        data = base64.b64decode(image_b64)
+        pil_img = PILImage.open(_BytesIO(data)).convert("RGB")
+        text = _ocr_text_from_pil(pil_img)
+        return _isbn_from_ocr_text(text)
+    except Exception as e:
+        print(f"  [OCR-IMG ERRO] {e}")
+    return ""
+
+
+# ---------------------------------------------------------------------------
 # Função pública
 # ---------------------------------------------------------------------------
 
@@ -367,6 +463,10 @@ def extract_metadata(iniciais_pdf_path: str, miolo_pdf_path: str = None) -> dict
             # Fallback: varrer todas as páginas se ISBN ainda vazio
             if not meta["isbn"]:
                 meta["isbn"] = _find_isbn_in_all_pages(pdf)
+
+            # Último fallback: OCR via pytesseract (quando ISBN está em imagem)
+            if not meta["isbn"]:
+                meta["isbn"] = _extract_isbn_via_ocr(pdf)
 
     except Exception as e:
         print(f"  [AVISO] Erro ao extrair metadados de {iniciais_pdf_path}: {e}")
