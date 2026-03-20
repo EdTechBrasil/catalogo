@@ -186,9 +186,7 @@ def build_resumo(wb: Workbook, records: list[dict]) -> None:
     total(c_start + len(colecoes) + 1, 1, "TOTAL",
           f"=SUM(B{c_start+1}:B{c_start+len(colecoes)})")
 
-    # Por Disciplina (D col)
-    disciplinas = sorted(set(r["Título"].split(" - ")[0].split()[-1].upper()
-                             if " - " in r["Título"] else "" for r in records) - {""})
+    # Por Ano (D col)
     d_start = len(tipos) + 4
     title_block(d_start, 4, "POR ANO")
     anos = sorted(set(r["Ano de publicação"] for r in records if r["Ano de publicação"]))

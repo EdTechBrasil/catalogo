@@ -326,11 +326,6 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
     }
     const data = await res.json();
     State.records = renumber(dedup([...State.records, ...data.records]));
-    data.records.forEach(rec => {
-      if (rec._debug_isbn) {
-        console.warn(`[ISBN-DBG] ${rec["Título"]}:`, rec._debug_isbn);
-      }
-    });
     saveState();
     refreshGrid();
     toast(`✅ ${State.records.length} título(s) processado(s)`, "success");
@@ -506,10 +501,14 @@ function groupCountByTipo(records) {
   return Object.entries(map).sort((a, b) => a[0].localeCompare(b[0], "pt-BR"));
 }
 
+function escHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 function tableHTML(rows) {
   if (!rows.length) return "<p style='padding:12px;color:#888;font-size:13px'>Sem dados</p>";
   return "<table>" + rows.map(([k, v]) =>
-    `<tr><td>${k}</td><td>${v}</td></tr>`
+    `<tr><td>${escHtml(k)}</td><td>${escHtml(v)}</td></tr>`
   ).join("") + "</table>";
 }
 

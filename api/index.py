@@ -30,9 +30,14 @@ from scanner import SERIE_MAP, TIPO_SUFFIX, scan_and_group
 
 app = FastAPI(title="Catálogo Gráfica Educar")
 
+_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8000",
+    *([o] if (o := os.environ.get("ALLOWED_ORIGIN", "")) else []),
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -132,6 +137,12 @@ def _renumber(records: list[dict]) -> list[dict]:
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
+_MAX_FILE_SIZE  = 50 * 1024 * 1024  # 50 MB por arquivo
+_MAX_FILE_COUNT = 50
+_MAX_ZIP_ENTRIES = 500
+_ZIP_MAGIC = b"PK\x03\x04"
+
+
 @app.post("/api/upload")
 async def upload_files(files: list[UploadFile] = File(...)):
     """
@@ -145,10 +156,14 @@ async def upload_files(files: list[UploadFile] = File(...)):
         raise
     except Exception as e:
         import traceback
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+        print(f"[ERRO] {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar arquivos.")
 
 
 async def _do_upload(files: list[UploadFile]):
+    if len(files) > _MAX_FILE_COUNT:
+        raise HTTPException(status_code=400, detail=f"Máximo de {_MAX_FILE_COUNT} arquivos por vez.")
+
     zips = [f for f in files if f.filename.lower().endswith(".zip")]
     pdfs = [f for f in files if f.filename.lower().endswith(".pdf")]
 
@@ -157,8 +172,14 @@ async def _do_upload(files: list[UploadFile]):
     if zips:
         uf = zips[0]
         content = await uf.read()
+        if len(content) > _MAX_FILE_SIZE:
+            raise HTTPException(status_code=413, detail="Arquivo ZIP excede 50 MB.")
+        if not content.startswith(_ZIP_MAGIC):
+            raise HTTPException(status_code=400, detail="Arquivo inválido: não é um ZIP.")
         with tempfile.TemporaryDirectory() as tmpdir:
             with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                if len(zf.namelist()) > _MAX_ZIP_ENTRIES:
+                    raise HTTPException(status_code=400, detail=f"ZIP contém mais de {_MAX_ZIP_ENTRIES} entradas.")
                 zf.extractall(tmpdir)
             records = scan_and_group(tmpdir)
 
@@ -167,6 +188,8 @@ async def _do_upload(files: list[UploadFile]):
 
         for uf in pdfs:
             content = await uf.read()
+            if len(content) > _MAX_FILE_SIZE:
+                raise HTTPException(status_code=413, detail=f"Arquivo {uf.filename!r} excede 50 MB.")
             info = _infer_from_filename(uf.filename)
             key = (info["serie"], info["tipo"], info["tema"], info["variante"])
             if key not in groups:
@@ -183,6 +206,8 @@ async def _do_upload(files: list[UploadFile]):
             for (serie, tipo, tema, _variante), g in groups.items():
                 all_names = list(g["content"].keys())
                 meta_name = g["iniciais"] or (all_names[0] if all_names else None)
+                if not meta_name:
+                    continue
                 pages_name = g["miolo"] or meta_name
 
                 # Gravar arquivos necessários no tmpdir
@@ -386,6 +411,13 @@ async def process_text(payload: ProcessTextPayload):
             if effective_text.strip() and all_empty and not warning:
                 warning = "LLM não encontrou metadados — verifique se o PDF contém ficha CIP em texto (não imagem)"
             titulo = f"{tema} - {tipo}" if tema and tipo else tema or tipo
+            # Diagnóstico ISBN — apenas no log do servidor
+            isbn_pos = effective_text.lower().find("isbn")
+            if isbn_pos >= 0:
+                debug_isbn = effective_text[max(0, isbn_pos-10):isbn_pos+80]
+            else:
+                debug_isbn = f"[NÃO ENCONTRADO] primeiros 200 chars: {effective_text[:200]}"
+            print(f"  [ISBN-DBG] {titulo}: {debug_isbn!r}")
             record = {
                 "Item":                        0,
                 "Opção":                       1,
@@ -404,13 +436,6 @@ async def process_text(payload: ProcessTextPayload):
             }
             if warning:
                 record["_warning"] = warning
-            # Diagnóstico ISBN
-            isbn_pos = effective_text.lower().find("isbn")
-            if isbn_pos >= 0:
-                debug_isbn = effective_text[max(0, isbn_pos-10):isbn_pos+80]
-            else:
-                debug_isbn = f"[NÃO ENCONTRADO] primeiros 200 chars: {effective_text[:200]}"
-            record["_debug_isbn"] = debug_isbn
             return record
 
         tasks = [
@@ -437,7 +462,8 @@ async def process_text(payload: ProcessTextPayload):
         raise
     except Exception as e:
         import traceback
-        raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}\n{traceback.format_exc()}")
+        print(f"[ERRO] {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail="Erro interno ao processar arquivos.")
 
 
 @app.post("/api/export/excel")
@@ -473,6 +499,16 @@ async def export_csv(body: ExportBody):
         media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": 'attachment; filename="catalogo_grafica_educar.csv"'},
     )
+
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────────
+
+from pdf_metadata import _LLM_EXECUTOR
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    _LLM_EXECUTOR.shutdown(wait=False)
 
 
 # ── Static files (deve ser montado por último) ────────────────────────────────

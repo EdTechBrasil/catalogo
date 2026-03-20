@@ -93,7 +93,7 @@ def _normalize_isbn(raw: str) -> str:
 
 
 _ISBN_RE = re.compile(
-    r"ISBN(?:[- ]?1[03])?[:\s]*([0-9][0-9 \-\.–]{8,}[0-9X])",
+    r"ISBN(?:[- ]?1[03])?[:\s]*([0-9][0-9 \-\.–]{8,30}[0-9X])",
     re.IGNORECASE,
 )
 
@@ -102,7 +102,9 @@ _ISBN_RE = re.compile(
 # LLM via TESS IA (OpenAI-compatible endpoint)
 # ---------------------------------------------------------------------------
 
-TESS_API_KEY    = os.environ.get("TESS_API_KEY", "603628|8M6zIovdmUSxFTAEXnTBHSiCCcHGwb2WCXdu3ZG755e2b4e8")
+TESS_API_KEY = os.environ.get("TESS_API_KEY")
+if not TESS_API_KEY:
+    raise RuntimeError("TESS_API_KEY env var não definida")
 TESS_AGENT_ID   = 41394
 TESS_MODEL      = "claude-4.5-haiku"
 TESS_ENDPOINT   = f"https://api.tess.im/agents/{TESS_AGENT_ID}/openai/chat/completions"
@@ -329,15 +331,15 @@ def _ocr_text_from_pil(pil_img) -> str:
             )
         finally:
             os.unlink(tmp)
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  [OCR-SILENT] Vision: {type(e).__name__}: {e}")
 
     # --- pytesseract (requer tesseract instalado no sistema) ---
     try:
         import pytesseract
         return pytesseract.image_to_string(pil_img, lang="por+eng", config="--psm 6")
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"  [OCR-SILENT] pytesseract: {type(e).__name__}: {e}")
 
     return ""
 
