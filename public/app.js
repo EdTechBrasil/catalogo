@@ -210,16 +210,20 @@ async function extractPdfText(arrayBuffer) {
       .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
     const pageText = lines.join("\n");
     pageTexts.push(pageText);
-    // Se página tem "CIP" ou "ISBN" no texto MAS texto é curto (ISBN em imagem),
-    // OU se é a página 2 com menos de 500 chars de texto, renderizar como imagem
+    // Sempre capturar página 2 como imagem (ficha CIP quase sempre está lá,
+    // mesmo quando o conteúdo é imagem/vetor e não texto)
     const hasCipKeyword = /\b(cip|isbn|catalo|catalogação)\b/i.test(pageText);
-    const isPage2 = i === 2;
-    if ((hasCipKeyword && pageText.length < 800) || (isPage2 && pageText.length < 500)) {
+    const shouldCapture = i === 2 || hasCipKeyword;
+    if (shouldCapture) {
       try {
         pageImages[i] = await renderPageToJpeg(page);
-      } catch (_) { /* silenciar erros de canvas */ }
+        console.log(`[OCR] Página ${i} capturada como imagem (${pageImages[i].length} chars b64)`);
+      } catch (err) {
+        console.warn(`[OCR] Falha ao renderizar página ${i} como imagem:`, err);
+      }
     }
   }
+  console.log(`[OCR] Total de imagens capturadas: ${Object.keys(pageImages).length} para ${pdf.numPages} páginas`);
   return { text: pageTexts.join("\n"), pages: pageTexts, pageImages, pageCount: pdf.numPages };
 }
 

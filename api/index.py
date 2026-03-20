@@ -369,10 +369,14 @@ async def process_text(payload: ProcessTextPayload):
                             break
 
             # Último fallback: OCR sobre imagens de página enviadas pelo browser
+            n_imgs = len(g.get("page_images", {}))
+            print(f"  [OCR] page_images recebidas: {n_imgs} | isbn atual: {meta.get('isbn')!r}")
             if not meta.get("isbn") and g.get("page_images"):
                 loop = asyncio.get_event_loop()
                 for page_num, img_b64 in g["page_images"].items():
+                    print(f"  [OCR] tentando OCR na página {page_num} ({len(img_b64)} chars b64)")
                     isbn = await loop.run_in_executor(None, _extract_isbn_via_ocr_image, img_b64)
+                    print(f"  [OCR] resultado página {page_num}: {isbn!r}")
                     if isbn:
                         meta["isbn"] = isbn
                         print(f"  [ISBN-OCR-browser] encontrado na página {page_num}")
