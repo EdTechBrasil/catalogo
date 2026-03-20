@@ -180,21 +180,40 @@ function initTabs() {
 
 // ── PDF client-side extraction ────────────────────────────────────────────────
 
-async function renderPageToJpeg(page, scale = 1.5) {
-  const viewport = page.getViewport({ scale });
-  const canvas = document.createElement("canvas");
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
-  return canvas.toDataURL("image/jpeg", 0.75).split(",")[1]; // base64 sem header
+// ── Tesseract OCR (client-side, funciona no Vercel sem dependências de servidor) ──
+
+let _tessWorker = null;
+
+async function getTessWorker() {
+  if (!_tessWorker) {
+    _tessWorker = await Tesseract.createWorker("por+eng", 1, {
+      logger: () => {}, // silenciar logs internos
+    });
+  }
+  return _tessWorker;
+}
+
+async function ocrPageCanvas(page) {
+  /** Renderiza a página no canvas e executa OCR. Retorna texto ou ''. */
+  try {
+    const viewport = page.getViewport({ scale: 1.5 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+    const worker = await getTessWorker();
+    const { data: { text } } = await worker.recognize(canvas);
+    return text || "";
+  } catch (err) {
+    console.warn("[OCR] Erro no OCR:", err);
+    return "";
+  }
 }
 
 async function extractPdfText(arrayBuffer) {
   const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
   const pdf = await loadingTask.promise;
   const pageTexts = [];
-  // page_images: base64 JPEG para páginas com pouco texto (provável CIP em imagem)
-  const pageImages = {};
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
@@ -209,22 +228,24 @@ async function extractPdfText(arrayBuffer) {
       .sort((a, b) => Number(b) - Number(a))
       .map(y => lineMap[y].sort((a, b) => a.x - b.x).map(i => i.str).join(" "));
     const pageText = lines.join("\n");
-    pageTexts.push(pageText);
-    // Sempre capturar página 2 como imagem (ficha CIP quase sempre está lá,
-    // mesmo quando o conteúdo é imagem/vetor e não texto)
-    const hasCipKeyword = /\b(cip|isbn|catalo|catalogação)\b/i.test(pageText);
-    const shouldCapture = i === 2 || hasCipKeyword;
-    if (shouldCapture) {
-      try {
-        pageImages[i] = await renderPageToJpeg(page);
-        console.log(`[OCR] Página ${i} capturada como imagem (${pageImages[i].length} chars b64)`);
-      } catch (err) {
-        console.warn(`[OCR] Falha ao renderizar página ${i} como imagem:`, err);
+
+    // Para página 2 (ficha CIP): se o texto não contém ISBN, tentar OCR
+    const hasIsbn = /\bISBN\b/i.test(pageText) && /97[89]/.test(pageText);
+    const isCipPage = i === 2 || (/\b(cip|catalogação)\b/i.test(pageText) && pageText.length < 1200);
+    if (isCipPage && !hasIsbn && typeof Tesseract !== "undefined") {
+      showSpinner(`OCR página ${i} de ${pdf.numPages}…`);
+      const ocrText = await ocrPageCanvas(page);
+      if (ocrText && /97[89]/.test(ocrText)) {
+        console.log(`[OCR] Página ${i} — ISBN encontrado via OCR`);
+        pageTexts.push(pageText + "\n[OCR]\n" + ocrText);
+      } else {
+        pageTexts.push(pageText);
       }
+    } else {
+      pageTexts.push(pageText);
     }
   }
-  console.log(`[OCR] Total de imagens capturadas: ${Object.keys(pageImages).length} para ${pdf.numPages} páginas`);
-  return { text: pageTexts.join("\n"), pages: pageTexts, pageImages, pageCount: pdf.numPages };
+  return { text: pageTexts.join("\n"), pages: pageTexts, pageCount: pdf.numPages };
 }
 
 async function extractZipTexts(file) {
@@ -239,9 +260,9 @@ async function extractZipTexts(file) {
   for (const { path, entry } of pdfEntries) {
     try {
       const ab = await entry.async("arraybuffer");
-      const { text, pages, pageImages, pageCount } = await extractPdfText(ab);
+      const { text, pages, pageCount } = await extractPdfText(ab);
       const filename = path.split("/").pop();
-      results.push({ filename, text, pages, page_images: pageImages, page_count: pageCount });
+      results.push({ filename, text, pages, page_count: pageCount });
     } catch (err) {
       console.warn(`Erro ao processar ${path}:`, err);
     }
@@ -273,8 +294,8 @@ document.getElementById("inp-upload").addEventListener("change", async (e) => {
         fileTexts.push(...zipTexts);
       } else if (nameLow.endsWith(".pdf")) {
         showSpinner(`Extraindo texto: ${file.name}`);
-        const { text, pages, pageImages, pageCount } = await extractPdfText(await file.arrayBuffer());
-        fileTexts.push({ filename: file.name, text, pages, page_images: pageImages, page_count: pageCount });
+        const { text, pages, pageCount } = await extractPdfText(await file.arrayBuffer());
+        fileTexts.push({ filename: file.name, text, pages, page_count: pageCount });
       }
     }
 
